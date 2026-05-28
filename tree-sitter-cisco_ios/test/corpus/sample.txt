@@ -1,0 +1,12 @@
+============
+a quick test
+============
+
+hostname test
+
+---
+
+(configuration_file
+  (system_section
+    (hostname_statement
+      (value))))
