@@ -1,0 +1,20 @@
+===
+archive
+===
+
+!
+! version 26.1.0
+!
+archive
+   path disk0:someconfig
+   end
+!
+
+---
+
+(configuration_file
+  (running_version)
+  (archive_section
+    (file_path)
+  )
+)

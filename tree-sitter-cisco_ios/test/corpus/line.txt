@@ -1,0 +1,19 @@
+===
+activation-character
+===
+
+!
+! version 26.1.0
+!
+line console
+   activation-character 127
+!
+
+---
+
+(configuration_file
+  (running_version)
+  (line_section
+    (line_type)
+    (activation_character
+      (ascii_value))))

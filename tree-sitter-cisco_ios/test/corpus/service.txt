@@ -1,0 +1,18 @@
+===
+version
+===
+
+!
+! version 26.1.0
+!
+version 26.2.0
+!
+
+---
+
+(configuration_file
+  (running_version)
+  (service_section
+    (configured_version)
+  )
+)

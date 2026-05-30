@@ -1,0 +1,59 @@
+===
+full config
+===
+
+!
+! version 26.1.0
+!
+version 26.2.0
+!
+archive
+   path disk0:someconfig
+   end
+!
+async-bootp bootfile :172.30.1.1 "pcboot"
+!
+line console
+   activation-character 127
+!
+hostname test
+!
+alias exec siib show ip interface brief
+alias exec sibnb show ip bgp neighbor brief
+!
+
+---
+
+(configuration_file
+  (running_version)
+  (service_section
+    (configured_version)
+  )
+  (archive_section
+    (file_path)
+  )
+  (async_bootp_section
+    (async_bootp_tag)
+    (async_bootp_hostname)
+    (async_bootp_data)
+  )
+  (line_section
+    (line_type)
+    (activation_character
+      (ascii_value)
+    )
+  )
+  (hostname_section
+    (value)
+  )
+  (alias_statement
+    (mode)
+    (alias)
+    (command)
+  )
+  (alias_statement
+    (mode)
+    (alias)
+    (command)
+  )
+)

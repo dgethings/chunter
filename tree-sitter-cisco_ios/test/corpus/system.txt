@@ -1,0 +1,66 @@
+============
+hostname
+============
+
+!
+! version 26.1.0
+!
+hostname test
+!
+
+---
+
+(configuration_file
+  (running_version)
+  (hostname_section
+    (value)
+  )
+)
+
+===
+alias
+===
+
+!
+! version 26.1.0
+!
+alias exec siib show ip interface brief
+!
+
+---
+
+(configuration_file
+  (running_version)
+  (alias_statement
+    (mode)
+    (alias)
+    (command)
+  )
+)
+
+===
+two aliases
+===
+
+!
+! version 26.1.0
+!
+alias exec siib show ip interface brief
+alias exec sibnb show ip bgp neighbor brief
+!
+
+---
+
+(configuration_file
+  (running_version)
+  (alias_statement
+    (mode)
+    (alias)
+    (command)
+  )
+  (alias_statement
+    (mode)
+    (alias)
+    (command)
+  )
+)
