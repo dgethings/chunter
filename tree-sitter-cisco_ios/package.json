@@ -1,6 +1,6 @@
 {
   "name": "tree-sitter-cisco-ios",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Tree sitter grammar for the Cisco IOS network Operating System",
   "type": "module",
   "repository": {

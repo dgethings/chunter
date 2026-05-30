@@ -31,7 +31,7 @@ export default grammar({
     _running_version: $ => seq(
       "!",
       "version",
-      $.running_version
+      field("running_version", $.running_version)
     ),
 
     running_version: $ => /[a-z0-9\.-]+/,
@@ -44,7 +44,7 @@ export default grammar({
 
     _configured_version: $ => seq(
       "version",
-      $.configured_version
+      field("configured_version", $.configured_version)
     ),
 
     configured_version: $ => /[a-z0-9\.-]+/,

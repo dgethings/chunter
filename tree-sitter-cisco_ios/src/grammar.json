@@ -103,8 +103,12 @@
           "value": "version"
         },
         {
-          "type": "SYMBOL",
-          "name": "running_version"
+          "type": "FIELD",
+          "name": "running_version",
+          "content": {
+            "type": "SYMBOL",
+            "name": "running_version"
+          }
         }
       ]
     },
@@ -153,8 +157,12 @@
           "value": "version"
         },
         {
-          "type": "SYMBOL",
-          "name": "configured_version"
+          "type": "FIELD",
+          "name": "configured_version",
+          "content": {
+            "type": "SYMBOL",
+            "name": "configured_version"
+          }
         }
       ]
     },

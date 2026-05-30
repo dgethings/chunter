@@ -84,10 +84,21 @@
     "type": "configuration_file",
     "named": true,
     "root": true,
-    "fields": {},
+    "fields": {
+      "running_version": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "running_version",
+            "named": true
+          }
+        ]
+      }
+    },
     "children": {
       "multiple": true,
-      "required": true,
+      "required": false,
       "types": [
         {
           "type": "alias_statement",
@@ -107,10 +118,6 @@
         },
         {
           "type": "line_section",
-          "named": true
-        },
-        {
-          "type": "running_version",
           "named": true
         },
         {
@@ -177,15 +184,22 @@
   {
     "type": "service_section",
     "named": true,
-    "fields": {},
+    "fields": {
+      "configured_version": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "configured_version",
+            "named": true
+          }
+        ]
+      }
+    },
     "children": {
-      "multiple": true,
+      "multiple": false,
       "required": false,
       "types": [
-        {
-          "type": "configured_version",
-          "named": true
-        },
         {
           "type": "service_statements",
           "named": true
