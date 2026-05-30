@@ -3,38 +3,81 @@ package parse
 import (
 	"fmt"
 	"log"
-	"strings"
 
 	"github.com/dgethings/chunter/lsp"
+	ts_ci "github.com/dgethings/chunter/tree-sitter-cisco_ios/bindings/go"
+	ts "github.com/tree-sitter/go-tree-sitter"
 )
 
 type State struct {
-	Documents map[string]string
+	Documents map[string][]byte
+	Parser    *ts.Parser
+	Tree      *ts.Tree
 }
 
 func NewState() State {
-	return State{Documents: map[string]string{}}
-}
-
-func (s *State) SetDocument(uri, text string) {
-	s.Documents[uri] = text
-}
-
-func (s *State) UpdateDocument(uri, text string, logger *log.Logger) []lsp.Diagnostic {
-	s.Documents[uri] = text
-	diagnostics := []lsp.Diagnostic{}
-
-	for row, line := range strings.Split(text, "\n") {
-		if strings.Contains(line, "cisco") {
-			idx := strings.Index(line, "cisco")
-			diagnostics = append(diagnostics, lsp.Diagnostic{
-				Range:    LineRange(uint(row), uint(idx), uint(idx+len("cisco"))),
-				Severity: 1,
-				Source:   "chunter",
-				Message:  "watch for the 800lb gorilla",
-			})
-		}
+	return State{
+		Documents: map[string][]byte{},
+		Parser:    ts.NewParser(),
 	}
+}
+
+func (s *State) Close() {
+	s.Parser.Close()
+	s.Tree.Close()
+}
+
+func (s *State) SetDocument(uri string, text []byte) {
+	s.Documents[uri] = text
+	s.Parser.SetLanguage(ts.NewLanguage(ts_ci.Language()))
+	s.Tree = s.Parser.Parse([]byte(text), nil)
+}
+
+func (s *State) UpdateDocument(uri string, text []byte, logger *log.Logger) []lsp.Diagnostic {
+	s.Documents[uri] = text
+	s.Tree = s.Parser.Parse([]byte(text), s.Tree)
+	diagnostics := []lsp.Diagnostic{}
+	if s.Tree == nil {
+		logger.Printf("parser returned empty tree for: %s", text)
+		return diagnostics
+	}
+	root := s.Tree.RootNode()
+	if root == nil {
+		logger.Println("tree has no root node")
+		return diagnostics
+	}
+	runVerNode := root.ChildByFieldName("running_version")
+	var runVer string
+	if runVerNode != nil {
+		runVer = string(text[runVerNode.StartByte():runVerNode.EndByte()])
+	}
+	cfgVerNode := root.ChildByFieldName("configured_version")
+	var cfgVer string
+	if cfgVerNode != nil {
+		cfgVer = string(text[cfgVerNode.StartByte():cfgVerNode.EndByte()])
+	}
+	if runVer != cfgVer {
+		logger.Printf("version mismatch. running: %s configured: %s", runVer, cfgVer)
+
+		diagnostics = append(diagnostics, lsp.Diagnostic{
+			Range:    LineRange(runVerNode.StartPosition().Row, runVerNode.StartPosition().Column, runVerNode.EndPosition().Column),
+			Severity: 1,
+			Source:   "chunter",
+			Message:  "running version and configured version mismatch",
+		})
+	}
+
+	// for row, line := range strings.Split(text, "\n") {
+	// 	if strings.Contains(line, "cisco") {
+	// 		idx := strings.Index(line, "cisco")
+	// 		diagnostics = append(diagnostics, lsp.Diagnostic{
+	// 			Range:    LineRange(uint(row), uint(idx), uint(idx+len("cisco"))),
+	// 			Severity: 1,
+	// 			Source:   "chunter",
+	// 			Message:  "watch for the 800lb gorilla",
+	// 		})
+	// 	}
+	// }
 	return diagnostics
 }
 

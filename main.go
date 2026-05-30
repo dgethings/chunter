@@ -20,6 +20,7 @@ func main() {
 	scanner.Split(rpc.Split)
 
 	state := parse.NewState()
+	defer state.Close()
 	writer := os.Stdout
 
 	for scanner.Scan() {
@@ -59,7 +60,7 @@ func handleMessage(logger *log.Logger, writer io.Writer, state parse.State, meth
 		}
 
 		logger.Printf("opened: %s", request.Params.TextDocument.URI)
-		state.SetDocument(request.Params.TextDocument.URI, request.Params.TextDocument.Text)
+		state.SetDocument(request.Params.TextDocument.URI, []byte(request.Params.TextDocument.Text))
 	case "textDocument/didChange":
 		var request lsp.TextDocumentDidChangeNotification
 		if err := json.Unmarshal(contents, &request); err != nil {
@@ -67,9 +68,8 @@ func handleMessage(logger *log.Logger, writer io.Writer, state parse.State, meth
 			return
 		}
 
-		logger.Printf("changed: %s", request.Params.TextDocument.URI)
 		for _, change := range request.Params.ContentChanges {
-			diagnostics := state.UpdateDocument(request.Params.TextDocument.URI, change.Text, logger)
+			diagnostics := state.UpdateDocument(request.Params.TextDocument.URI, []byte(change.Text), logger)
 			writeResponse(writer, lsp.PublishDiagnosticsNotification{
 				Notification: lsp.Notification{
 					RPC:    "2.0",
@@ -81,6 +81,7 @@ func handleMessage(logger *log.Logger, writer io.Writer, state parse.State, meth
 				},
 			})
 		}
+		logger.Printf("changed: %s", request.Params.TextDocument.URI)
 	case "textDocument/hover":
 		var request lsp.HoverRequest
 		if err := json.Unmarshal(contents, &request); err != nil {
