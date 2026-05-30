@@ -1,4 +1,4 @@
-module github.com/tree-sitter/tree-sitter-cisco_ios
+module github.com/dgethings/chunter/tree-sitter-cisco_ios
 
 go 1.22
 
