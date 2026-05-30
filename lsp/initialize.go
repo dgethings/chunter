@@ -38,9 +38,9 @@ type ServerInfo struct {
 	Version string `json:"version"`
 }
 
-func NewInitializeResponse(id int) InitializeResponse {
+func NewInitializeResponse(id int, version string) InitializeResponse {
 	return InitializeResponse{
 		Response: Response{RPC: "2.0", ID: &id},
-		Result:   InitializeResult{Capabilities: ServerCapabilities{TextDocumentSync: 1, HoverProvider: true, DefinitionProvider: true, CompletionProvider: map[string]any{}}, ServerInfo: ServerInfo{Name: "chunter", Version: "0.0.0"}},
+		Result:   InitializeResult{Capabilities: ServerCapabilities{TextDocumentSync: 1, HoverProvider: true, DefinitionProvider: true, CompletionProvider: map[string]any{}}, ServerInfo: ServerInfo{Name: "chunter", Version: version}},
 	}
 }

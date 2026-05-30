@@ -12,6 +12,8 @@ import (
 	"github.com/dgethings/chunter/rpc"
 )
 
+var version = "dev"
+
 func main() {
 	logger := getLogger("/Users/dgethings/git/chunter/log.log")
 	logger.Println("at the ready")
@@ -49,7 +51,7 @@ func handleMessage(logger *log.Logger, writer io.Writer, state parse.State, meth
 		}
 
 		logger.Printf("connected to: %s %s", request.Params.ClientInfo.Name, request.Params.ClientInfo.Version)
-		msg := lsp.NewInitializeResponse(request.ID)
+		msg := lsp.NewInitializeResponse(request.ID, version)
 		writeResponse(writer, msg)
 		logger.Println("sent reply")
 	case "textDocument/didOpen":
