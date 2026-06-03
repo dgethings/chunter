@@ -1,0 +1,31 @@
+package protocol
+
+type InitializeParams struct {
+	ClientInfo *ClientInfo `json:"clientInfo"`
+}
+
+type ClientInfo struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
+
+type InitializeResult struct {
+	Capabilities ServerCapabilities `json:"capabilities"`
+	ServerInfo   ServerInfo         `json:"serverInfo"`
+}
+
+type ServerCapabilities struct {
+	TextDocumentSync              int               `json:"textDocumentSync"`
+	HoverProvider                 bool              `json:"hoverProvider"`
+	DefinitionProvider            bool              `json:"definitionProvider"`
+	CompletionProvider            *CompletionOptions `json:"completionProvider,omitempty"`
+}
+
+type CompletionOptions struct {
+	TriggerCharacters []string `json:"triggerCharacters,omitempty"`
+}
+
+type ServerInfo struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}

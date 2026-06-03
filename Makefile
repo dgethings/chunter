@@ -1,12 +1,12 @@
 .PHONY: all lsp clean release snapshot release-dry-run
 
 TS ?= tree-sitter
-TS_DIR := tree-sitter-cisco_ios
+TS_DIR := grammars/tree-sitter-cisco_ios
 TS_GRAMMAR := $(TS_DIR)/grammar.js
 TS_STAMP := .ts-gen-stamp
 BIN := bin/chunter
 
-SRCS := $(wildcard *.go lsp/*.go parse/*.go rpc/*.go)
+SRCS := $(wildcard main.go cmd/*.go internal/**/*.go)
 
 VERSION := $(shell svu current 2>/dev/null || echo "0.0.0")
 NEXT    := $(shell svu next)
@@ -19,10 +19,10 @@ $(TS_STAMP): $(TS_GRAMMAR)
 
 $(BIN): $(TS_STAMP) $(SRCS)
 	go clean -cache
-	go build -o $(BIN) .
+	CGO_ENABLED=1 go build -o $(BIN) .
 
 lsp:
-	go build -o $(BIN) .
+	CGO_ENABLED=1 go build -o $(BIN) .
 
 clean:
 	go clean -cache
