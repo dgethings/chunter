@@ -10,6 +10,10 @@ SRCS := $(wildcard main.go cmd/*.go internal/**/*.go)
 
 VERSION := $(shell svu current 2>/dev/null || echo "0.0.0")
 NEXT    := $(shell svu next)
+ROOT_DIR := $(shell pwd)
+CC_WRAPPER := $(ROOT_DIR)/scripts/cc
+
+export CC_WRAPPER
 
 all: $(BIN)
 
@@ -41,6 +45,7 @@ release:
 		git push origin "$(NEXT)"; \
 	fi
 	goreleaser release --clean
+	gh release upload $(NEXT) dist/config.yaml dist/metadata.json dist/artifacts.json
 
 snapshot:
 	goreleaser release --snapshot --clean

@@ -1,3 +1,4 @@
 .ts-gen-stamp
 bin/
+dist/
 log.log
