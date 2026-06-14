@@ -3,16 +3,18 @@ package cisco_ios
 import (
 	"context"
 
-	"github.com/dgethings/chunter/internal/document"
-	"github.com/dgethings/chunter/internal/protocol"
 	ts_ci "github.com/dgethings/chunter/grammars/tree-sitter-cisco_ios/bindings/go"
+	"github.com/dgethings/chunter/internal/document"
+	"github.com/dgethings/chunter/internal/keyword"
+	"github.com/dgethings/chunter/internal/protocol"
 	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
 type CiscoIOSFeature struct {
-	parser *sitter.Parser
-	trees  map[string]*sitter.Tree
-	lang   *sitter.Language
+	parser  *sitter.Parser
+	trees   map[string]*sitter.Tree
+	lang    *sitter.Language
+	keyword *keyword.Set
 }
 
 func New() *CiscoIOSFeature {
@@ -20,9 +22,10 @@ func New() *CiscoIOSFeature {
 	p := sitter.NewParser()
 	p.SetLanguage(lang)
 	return &CiscoIOSFeature{
-		parser: p,
-		trees:  make(map[string]*sitter.Tree),
-		lang:   lang,
+		parser:  p,
+		trees:   make(map[string]*sitter.Tree),
+		lang:    lang,
+		keyword: keywords,
 	}
 }
 

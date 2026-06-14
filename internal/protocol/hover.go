@@ -10,6 +10,13 @@ type HoverResult struct {
 }
 
 type MarkupContent struct {
-	Kind  string `json:"kind"`
-	Value string `json:"value"`
+	Kind  MarkupKind `json:"kind"`
+	Value string     `json:"value"`
 }
+
+type MarkupKind string
+
+const (
+	PlainText MarkupKind = "plaintext"
+	Markdown  MarkupKind = "markdown"
+)
