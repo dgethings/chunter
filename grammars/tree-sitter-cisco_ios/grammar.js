@@ -57,7 +57,7 @@ export default grammar({
 
     hostname_section: $ => seq(
       "hostname",
-      $.value,
+      field("hostname", $.value),
       "!"
     ),
 
