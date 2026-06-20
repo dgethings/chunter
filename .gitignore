@@ -2,3 +2,5 @@
 bin/
 dist/
 log.log
+example.ios.j2
+.nvim.lua
