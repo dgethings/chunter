@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/creachadair/jrpc2"
 	"github.com/creachadair/jrpc2/handler"
@@ -15,7 +16,8 @@ type InitializeParams struct {
 
 func (s *Server) Initialize(ctx context.Context, params InitializeParams) (protocol.InitializeResult, error) {
 	s.setState(stateInitialized)
-	logger.FromContext(ctx).Printf("connected to: %s %s", params.ClientInfo.Name, params.ClientInfo.Version)
+	logger.SetLogger()
+	slog.Info("connected to: %s %s", params.ClientInfo.Name, params.ClientInfo.Version)
 	return protocol.InitializeResult{
 		Capabilities: protocol.ServerCapabilities{
 			TextDocumentSync:   1,
@@ -31,7 +33,7 @@ func (s *Server) Initialize(ctx context.Context, params InitializeParams) (proto
 }
 
 func (s *Server) Initialized(ctx context.Context) error {
-	logger.FromContext(ctx).Println("client initialized")
+	slog.Info("client initialized")
 	return nil
 }
 

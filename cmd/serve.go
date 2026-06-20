@@ -1,13 +1,11 @@
 package cmd
 
 import (
-	"context"
 	"os"
 
 	"github.com/creachadair/jrpc2"
 	"github.com/creachadair/jrpc2/channel"
 	"github.com/dgethings/chunter/internal/features/cisco_ios"
-	"github.com/dgethings/chunter/internal/logger"
 	"github.com/dgethings/chunter/internal/server"
 	"github.com/spf13/cobra"
 )
@@ -29,9 +27,9 @@ var serveCmd = &cobra.Command{
 
 		opts := &jrpc2.ServerOptions{
 			AllowPush: true,
-			NewContext: func() context.Context {
-				return logger.With(context.Background(), logger.Default())
-			},
+			// NewContext: func() context.Context {
+			// 	return logger.With(context.Background(), logger.Default())
+			// },
 		}
 
 		ioChannel := channel.Header("")(os.Stdin, os.Stdout)

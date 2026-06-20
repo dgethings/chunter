@@ -2,10 +2,10 @@ package server
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/creachadair/jrpc2"
 	"github.com/dgethings/chunter/internal/document"
-	"github.com/dgethings/chunter/internal/logger"
 	"github.com/dgethings/chunter/internal/protocol"
 )
 
@@ -17,25 +17,27 @@ func (s *Server) DidOpen(ctx context.Context, params protocol.DidOpenTextDocumen
 		[]byte(params.TextDocument.Text),
 	)
 	s.documents.Put(doc)
+	l := slog.With("language", doc.LanguageID, "message", "didOpen")
 
 	f, err := s.features.Route(doc.LanguageID)
 	if err != nil {
-		logger.FromContext(ctx).Printf("didOpen: %s", err)
+		l.Error("failed to find supported language", "error", err.Error())
 		return nil
 	}
 	if err := f.DidOpen(ctx, doc); err != nil {
-		logger.FromContext(ctx).Printf("didOpen feature error: %s", err)
+		l.Error("didOpen error", "error", err.Error())
 	}
-	logger.FromContext(ctx).Printf("opened: %s", doc.URI)
+	l.Debug("opened", "uri", doc.URI)
 	return nil
 }
 
 func (s *Server) DidChange(ctx context.Context, params protocol.DidChangeTextDocumentParams) error {
 	doc, err := s.documents.Get(params.TextDocument.URI)
 	if err != nil {
-		logger.FromContext(ctx).Printf("didChange: %s", err)
+		slog.Error("failed to get document", "error", err.Error())
 		return nil
 	}
+	l := slog.With("message", "didChange", "uri", doc.URI, "language", doc.LanguageID)
 
 	for _, change := range params.ContentChanges {
 		doc.Content = []byte(change.Text)
@@ -44,13 +46,13 @@ func (s *Server) DidChange(ctx context.Context, params protocol.DidChangeTextDoc
 
 		f, err := s.features.Route(doc.LanguageID)
 		if err != nil {
-			logger.FromContext(ctx).Printf("didChange route: %s", err)
+			l.Error("failed to find supported language", "language", doc.LanguageID, "error", err)
 			continue
 		}
 
 		diagnostics, err := f.DidChange(ctx, doc)
 		if err != nil {
-			logger.FromContext(ctx).Printf("didChange feature error: %s", err)
+			l.Error("failed to get diagnostics", "language", doc.LanguageID, "error", err)
 			continue
 		}
 
@@ -62,23 +64,25 @@ func (s *Server) DidChange(ctx context.Context, params protocol.DidChangeTextDoc
 			})
 		}
 	}
-	logger.FromContext(ctx).Printf("changed: %s", doc.URI)
+	l.Debug("successfully changed", "uri", doc.URI)
 	return nil
 }
 
 func (s *Server) DidClose(ctx context.Context, params protocol.TextDocumentIdentifier) error {
 	doc, err := s.documents.Get(params.URI)
 	if err != nil {
+		slog.Error("failed to get document", "error", err.Error())
 		return nil
 	}
+	l := slog.With("uri", doc.URI, "language", doc.LanguageID, "message", "didClose")
 
 	f, err := s.features.Route(doc.LanguageID)
 	if err != nil {
-		logger.FromContext(ctx).Printf("didClose: %s", err)
+		l.Error("failed to find supported language", "error", err.Error())
 		return nil
 	}
 	if err := f.DidClose(ctx, doc); err != nil {
-		logger.FromContext(ctx).Printf("didClose feature error: %s", err)
+		l.Error("failed execution", "error", err.Error())
 	}
 	s.documents.Delete(params.URI)
 	return nil
