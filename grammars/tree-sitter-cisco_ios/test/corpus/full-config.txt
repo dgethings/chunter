@@ -24,7 +24,7 @@ alias exec sibnb show ip bgp neighbor brief
 
 ---
 
-(configuration_file
+(global
   (running_version)
   (service_section
     (configured_version)
@@ -43,7 +43,7 @@ alias exec sibnb show ip bgp neighbor brief
       (ascii_value)
     )
   )
-  (hostname_section
+  (hostname
     (value)
   )
   (alias_statement

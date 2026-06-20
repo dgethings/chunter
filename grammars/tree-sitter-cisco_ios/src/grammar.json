@@ -2,20 +2,20 @@
   "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/grammar.schema.json",
   "name": "cisco_ios",
   "rules": {
-    "configuration_file": {
+    "global": {
       "type": "SEQ",
       "members": [
         {
-          "type": "STRING",
-          "value": "!"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "_running_version"
-        },
-        {
-          "type": "STRING",
-          "value": "!"
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "_running_version"
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
         },
         {
           "type": "CHOICE",
@@ -70,7 +70,7 @@
           "members": [
             {
               "type": "SYMBOL",
-              "name": "hostname_section"
+              "name": "hostname"
             },
             {
               "type": "BLANK"
@@ -109,6 +109,10 @@
             "type": "SYMBOL",
             "name": "running_version"
           }
+        },
+        {
+          "type": "STRING",
+          "value": "!"
         }
       ]
     },
@@ -187,7 +191,7 @@
         }
       ]
     },
-    "hostname_section": {
+    "hostname": {
       "type": "SEQ",
       "members": [
         {
@@ -195,8 +199,12 @@
           "value": "hostname"
         },
         {
-          "type": "SYMBOL",
-          "name": "value"
+          "type": "FIELD",
+          "name": "hostname",
+          "content": {
+            "type": "SYMBOL",
+            "name": "value"
+          }
         },
         {
           "type": "STRING",

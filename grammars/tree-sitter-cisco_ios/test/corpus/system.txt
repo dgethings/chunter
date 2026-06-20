@@ -10,7 +10,7 @@ hostname test
 
 ---
 
-(configuration_file
+(global
   (running_version)
   (hostname_section
     (value)
@@ -29,7 +29,7 @@ alias exec siib show ip interface brief
 
 ---
 
-(configuration_file
+(global
   (running_version)
   (alias_statement
     (mode)
@@ -51,7 +51,7 @@ alias exec sibnb show ip bgp neighbor brief
 
 ---
 
-(configuration_file
+(global
   (running_version)
   (alias_statement
     (mode)

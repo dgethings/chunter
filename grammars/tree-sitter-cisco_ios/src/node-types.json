@@ -81,13 +81,18 @@
     "fields": {}
   },
   {
-    "type": "configuration_file",
+    "type": "configured_version",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "global",
     "named": true,
     "root": true,
     "fields": {
       "running_version": {
         "multiple": false,
-        "required": true,
+        "required": false,
         "types": [
           {
             "type": "running_version",
@@ -113,7 +118,7 @@
           "named": true
         },
         {
-          "type": "hostname_section",
+          "type": "hostname",
           "named": true
         },
         {
@@ -128,23 +133,19 @@
     }
   },
   {
-    "type": "configured_version",
+    "type": "hostname",
     "named": true,
-    "fields": {}
-  },
-  {
-    "type": "hostname_section",
-    "named": true,
-    "fields": {},
-    "children": {
-      "multiple": false,
-      "required": true,
-      "types": [
-        {
-          "type": "value",
-          "named": true
-        }
-      ]
+    "fields": {
+      "hostname": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "value",
+            "named": true
+          }
+        ]
+      }
     }
   },
   {

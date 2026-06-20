@@ -11,7 +11,7 @@ line console
 
 ---
 
-(configuration_file
+(global
   (running_version)
   (line_section
     (line_type)

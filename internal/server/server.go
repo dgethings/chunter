@@ -2,8 +2,6 @@ package server
 
 import (
 	"fmt"
-	"log"
-	"os"
 	"sync"
 
 	"github.com/dgethings/chunter/internal/document"
@@ -21,7 +19,6 @@ const (
 type Server struct {
 	documents *document.Store
 	features  *features.Router
-	logger    *log.Logger
 
 	stateMu sync.Mutex
 	state   serverState
@@ -32,17 +29,12 @@ func New(version string) *Server {
 	return &Server{
 		documents: document.NewStore(),
 		features:  features.NewRouter(),
-		logger:    log.New(os.Stderr, "[chunter] ", log.Ldate|log.Ltime|log.Lshortfile),
 		version:   version,
 	}
 }
 
 func (s *Server) RegisterFeature(f features.Feature) {
 	s.features.Register(f)
-}
-
-func (s *Server) Logger() *log.Logger {
-	return s.logger
 }
 
 func (s *Server) setState(newState serverState) error {

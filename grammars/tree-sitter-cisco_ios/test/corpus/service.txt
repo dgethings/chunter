@@ -10,7 +10,7 @@ version 26.2.0
 
 ---
 
-(configuration_file
+(global
   (running_version)
   (service_section
     (configured_version)

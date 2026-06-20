@@ -11,7 +11,7 @@ func FindNodeAtPosition(root *sitter.Node, line, col uint) *sitter.Node {
 		return nil
 	}
 	node := root.DescendantForPointRange(
-		sitter.Point{Row: line, Column: col},
+		sitter.Point{Row: 0, Column: 0},
 		sitter.Point{Row: line, Column: col},
 	)
 	return node

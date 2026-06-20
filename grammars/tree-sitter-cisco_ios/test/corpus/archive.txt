@@ -12,7 +12,7 @@ archive
 
 ---
 
-(configuration_file
+(global
   (running_version)
   (archive_section
     (file_path)

@@ -5,6 +5,7 @@ import (
 
 	"github.com/creachadair/jrpc2"
 	"github.com/creachadair/jrpc2/handler"
+	"github.com/dgethings/chunter/internal/logger"
 	"github.com/dgethings/chunter/internal/protocol"
 )
 
@@ -14,7 +15,7 @@ type InitializeParams struct {
 
 func (s *Server) Initialize(ctx context.Context, params InitializeParams) (protocol.InitializeResult, error) {
 	s.setState(stateInitialized)
-	s.logger.Printf("connected to: %s %s", params.ClientInfo.Name, params.ClientInfo.Version)
+	logger.FromContext(ctx).Printf("connected to: %s %s", params.ClientInfo.Name, params.ClientInfo.Version)
 	return protocol.InitializeResult{
 		Capabilities: protocol.ServerCapabilities{
 			TextDocumentSync:   1,
@@ -30,7 +31,7 @@ func (s *Server) Initialize(ctx context.Context, params InitializeParams) (proto
 }
 
 func (s *Server) Initialized(ctx context.Context) error {
-	s.logger.Println("client initialized")
+	logger.FromContext(ctx).Println("client initialized")
 	return nil
 }
 

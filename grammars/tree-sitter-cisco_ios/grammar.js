@@ -15,15 +15,13 @@ export default grammar({
   ],
 
   rules: {
-    configuration_file: $ => seq(
-      "!",
-      $._running_version,
-      "!",
+    global: $ => seq(
+      optional($._running_version),
       optional($.service_section),
       optional($.archive_section),
       optional($.async_bootp_section),
       optional($.line_section),
-      optional($.hostname_section),
+      optional($.hostname),
       optional($._alias_section),
     ),
 
@@ -31,7 +29,8 @@ export default grammar({
     _running_version: $ => seq(
       "!",
       "version",
-      field("running_version", $.running_version)
+      field("running_version", $.running_version),
+      "!"
     ),
 
     running_version: $ => /[a-z0-9\.-]+/,
@@ -55,7 +54,7 @@ export default grammar({
       "pad"
     ),
 
-    hostname_section: $ => seq(
+    hostname: $ => seq(
       "hostname",
       field("hostname", $.value),
       "!"

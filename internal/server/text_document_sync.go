@@ -5,6 +5,7 @@ import (
 
 	"github.com/creachadair/jrpc2"
 	"github.com/dgethings/chunter/internal/document"
+	"github.com/dgethings/chunter/internal/logger"
 	"github.com/dgethings/chunter/internal/protocol"
 )
 
@@ -19,20 +20,20 @@ func (s *Server) DidOpen(ctx context.Context, params protocol.DidOpenTextDocumen
 
 	f, err := s.features.Route(doc.LanguageID)
 	if err != nil {
-		s.logger.Printf("didOpen: %s", err)
+		logger.FromContext(ctx).Printf("didOpen: %s", err)
 		return nil
 	}
 	if err := f.DidOpen(ctx, doc); err != nil {
-		s.logger.Printf("didOpen feature error: %s", err)
+		logger.FromContext(ctx).Printf("didOpen feature error: %s", err)
 	}
-	s.logger.Printf("opened: %s", doc.URI)
+	logger.FromContext(ctx).Printf("opened: %s", doc.URI)
 	return nil
 }
 
 func (s *Server) DidChange(ctx context.Context, params protocol.DidChangeTextDocumentParams) error {
 	doc, err := s.documents.Get(params.TextDocument.URI)
 	if err != nil {
-		s.logger.Printf("didChange: %s", err)
+		logger.FromContext(ctx).Printf("didChange: %s", err)
 		return nil
 	}
 
@@ -43,13 +44,13 @@ func (s *Server) DidChange(ctx context.Context, params protocol.DidChangeTextDoc
 
 		f, err := s.features.Route(doc.LanguageID)
 		if err != nil {
-			s.logger.Printf("didChange route: %s", err)
+			logger.FromContext(ctx).Printf("didChange route: %s", err)
 			continue
 		}
 
 		diagnostics, err := f.DidChange(ctx, doc)
 		if err != nil {
-			s.logger.Printf("didChange feature error: %s", err)
+			logger.FromContext(ctx).Printf("didChange feature error: %s", err)
 			continue
 		}
 
@@ -61,7 +62,7 @@ func (s *Server) DidChange(ctx context.Context, params protocol.DidChangeTextDoc
 			})
 		}
 	}
-	s.logger.Printf("changed: %s", doc.URI)
+	logger.FromContext(ctx).Printf("changed: %s", doc.URI)
 	return nil
 }
 
@@ -73,11 +74,11 @@ func (s *Server) DidClose(ctx context.Context, params protocol.TextDocumentIdent
 
 	f, err := s.features.Route(doc.LanguageID)
 	if err != nil {
-		s.logger.Printf("didClose: %s", err)
+		logger.FromContext(ctx).Printf("didClose: %s", err)
 		return nil
 	}
 	if err := f.DidClose(ctx, doc); err != nil {
-		s.logger.Printf("didClose feature error: %s", err)
+		logger.FromContext(ctx).Printf("didClose feature error: %s", err)
 	}
 	s.documents.Delete(params.URI)
 	return nil

@@ -6,10 +6,11 @@ import (
 )
 
 var keywords = keyword.NewSet(map[string]keyword.Keyword{
-	"hostname_section": {
+	"hostname": {
 		Description: keyword.Description{
-			Format: protocol.Markdown,
+			Format: protocol.PlainText,
 			Value:  "To specify or modify the hostname for the network server, use the hostname command in global configuration mode.",
 		},
+		Section: "global",
 	},
 })
