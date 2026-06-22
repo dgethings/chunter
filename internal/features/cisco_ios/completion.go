@@ -22,10 +22,10 @@ func (f *CiscoIOSFeature) Completion(ctx context.Context, doc *document.Document
 		l.Error("cannot find section", "line", pos.Line, "column", pos.Character)
 		return nil, nil
 	}
-	kws := keywords.InSection(section.GrammarName())
+	kws := f.keyword.InSection(section.GrammarName())
 	items := []protocol.CompletionItem{}
-	for k, i := range kws {
-		items = append(items, protocol.CompletionItem{Label: k, Documentation: i.Description.Value})
+	for _, i := range kws {
+		items = append(items, protocol.CompletionItem{Label: i.Keyword, Documentation: i.Description.Value})
 	}
 	return items, nil
 }

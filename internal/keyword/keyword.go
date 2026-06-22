@@ -3,6 +3,7 @@ package keyword
 import "github.com/dgethings/chunter/internal/protocol"
 
 type Keyword struct {
+	Keyword string
 	Description
 	Section string
 }
@@ -12,25 +13,23 @@ type Description struct {
 	Value  string
 }
 
-type Set struct {
-	entries map[string]Keyword
-}
+type Keywords []Keyword
 
-func NewSet(entries map[string]Keyword) *Set {
-	return &Set{entries: entries}
-}
-
-func (s *Set) Lookup(nodeKind string) (Keyword, bool) {
-	kw, ok := s.entries[nodeKind]
-	return kw, ok
-}
-
-func (s *Set) InSection(section string) map[string]Keyword {
-	in := map[string]Keyword{}
-	for kw, item := range s.entries {
-		if item.Section == section {
-			in[kw] = item
+func (k Keywords) Lookup(name string) (Keyword, bool) {
+	for _, kw := range k {
+		if kw.Keyword == name {
+			return kw, true
 		}
 	}
-	return in
+	return Keyword{}, false
+}
+
+func (k Keywords) InSection(section string) []Keyword {
+	result := []Keyword{}
+	for _, kw := range k {
+		if kw.Section == section {
+			result = append(result, kw)
+		}
+	}
+	return result
 }

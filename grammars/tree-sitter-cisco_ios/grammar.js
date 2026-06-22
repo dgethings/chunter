@@ -15,7 +15,7 @@ export default grammar({
   ],
 
   rules: {
-    global: $ => seq(
+    config: $ => seq(
       optional($._running_version),
       optional($.service_section),
       optional($.archive_section),

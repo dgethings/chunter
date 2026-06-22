@@ -14,7 +14,7 @@ type CiscoIOSFeature struct {
 	parser  *sitter.Parser
 	trees   map[string]*sitter.Tree
 	lang    *sitter.Language
-	keyword *keyword.Set
+	keyword keyword.Keywords
 }
 
 func New() *CiscoIOSFeature {
@@ -25,7 +25,7 @@ func New() *CiscoIOSFeature {
 		parser:  p,
 		trees:   make(map[string]*sitter.Tree),
 		lang:    lang,
-		keyword: keywords,
+		keyword: Keywords,
 	}
 }
 

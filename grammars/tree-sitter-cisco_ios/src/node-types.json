@@ -81,12 +81,7 @@
     "fields": {}
   },
   {
-    "type": "configured_version",
-    "named": true,
-    "fields": {}
-  },
-  {
-    "type": "global",
+    "type": "config",
     "named": true,
     "root": true,
     "fields": {
@@ -131,6 +126,11 @@
         }
       ]
     }
+  },
+  {
+    "type": "configured_version",
+    "named": true,
+    "fields": {}
   },
   {
     "type": "hostname",
