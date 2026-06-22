@@ -40,12 +40,12 @@ func (f *CiscoIOSFeature) Close() {
 	f.parser.Close()
 }
 
-func (f *CiscoIOSFeature) DidOpen(ctx context.Context, doc *document.Document) error {
+func (f *CiscoIOSFeature) DidOpen(ctx context.Context, doc *document.Document) ([]protocol.Diagnostic, error) {
 	tree := f.parser.Parse(doc.Content, nil)
 	if tree != nil {
 		f.trees[doc.URI] = tree
 	}
-	return nil
+	return f.runDiagnostics(doc, tree), nil
 }
 
 func (f *CiscoIOSFeature) DidChange(ctx context.Context, doc *document.Document) ([]protocol.Diagnostic, error) {

@@ -23,17 +23,13 @@ var checkCmd = &cobra.Command{
 		feature := cisco_ios.New()
 		defer feature.Close()
 
-		doc := document.New(path, "cisco_ios", 0, content)
-		if err := feature.DidOpen(cmd.Context(), doc); err != nil {
-			return fmt.Errorf("parsing file: %w", err)
-		}
+	doc := document.New(path, "cisco_ios", 0, content)
+	diagnostics, err := feature.DidOpen(cmd.Context(), doc)
+	if err != nil {
+		return fmt.Errorf("parsing file: %w", err)
+	}
 
-		diagnostics, err := feature.DidChange(cmd.Context(), doc)
-		if err != nil {
-			return fmt.Errorf("running diagnostics: %w", err)
-		}
-
-		if len(diagnostics) == 0 {
+	if len(diagnostics) == 0 {
 			fmt.Println("No issues found.")
 			return nil
 		}

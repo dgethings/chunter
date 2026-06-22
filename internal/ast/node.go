@@ -23,3 +23,18 @@ func ChildByFieldName(node *sitter.Node, name string) *sitter.Node {
 	}
 	return node.ChildByFieldName(name)
 }
+
+// NamedChildByKind returns the first direct named child of node whose kind
+// matches, or nil if none is found. Useful for reaching named sub-sections
+// (e.g. a "service_section") whose fields do not propagate to the parent.
+func NamedChildByKind(node *sitter.Node, kind string) *sitter.Node {
+	if node == nil {
+		return nil
+	}
+	for i := uint(0); i < node.NamedChildCount(); i++ {
+		if c := node.NamedChild(i); c != nil && c.Kind() == kind {
+			return c
+		}
+	}
+	return nil
+}

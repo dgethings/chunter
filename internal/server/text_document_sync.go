@@ -24,8 +24,16 @@ func (s *Server) DidOpen(ctx context.Context, params protocol.DidOpenTextDocumen
 		l.Error("failed to find supported language", "error", err.Error())
 		return nil
 	}
-	if err := f.DidOpen(ctx, doc); err != nil {
+	diagnostics, err := f.DidOpen(ctx, doc)
+	if err != nil {
 		l.Error("didOpen error", "error", err.Error())
+	}
+	srv := jrpc2.ServerFromContext(ctx)
+	if srv != nil {
+		srv.Notify(ctx, "textDocument/publishDiagnostics", protocol.PublishDiagnosticsParams{
+			URI:         doc.URI,
+			Diagnostics: diagnostics,
+		})
 	}
 	l.Debug("opened", "uri", doc.URI)
 	return nil

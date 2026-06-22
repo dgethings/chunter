@@ -21,7 +21,7 @@ func TestHoverHostname(t *testing.T) {
 	content := []byte("!\n! version 26.1.0\n!\nhostname test\n!\n")
 	doc := document.New("file:///test.cfg", "cisco_ios", 1, content)
 
-	if err := f.DidOpen(context.Background(), doc); err != nil {
+	if _, err := f.DidOpen(context.Background(), doc); err != nil {
 		t.Fatalf("DidOpen failed: %v", err)
 	}
 
@@ -50,7 +50,7 @@ func TestHoverNoKeyword(t *testing.T) {
 	content := []byte("!\n! version 26.1.0\n!\nhostname test\n!\n")
 	doc := document.New("file:///test.cfg", "cisco_ios", 1, content)
 
-	if err := f.DidOpen(context.Background(), doc); err != nil {
+	if _, err := f.DidOpen(context.Background(), doc); err != nil {
 		t.Fatalf("DidOpen failed: %v", err)
 	}
 
