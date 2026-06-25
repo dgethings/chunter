@@ -10,9 +10,7 @@ version 26.2.0
 
 ---
 
-(global
+(config
   (running_version)
   (service_section
-    (configured_version)
-  )
-)
+    (configured_version)))

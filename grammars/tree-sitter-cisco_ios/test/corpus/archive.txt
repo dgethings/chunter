@@ -12,9 +12,7 @@ archive
 
 ---
 
-(global
+(config
   (running_version)
   (archive_section
-    (file_path)
-  )
-)
+    (file_path)))

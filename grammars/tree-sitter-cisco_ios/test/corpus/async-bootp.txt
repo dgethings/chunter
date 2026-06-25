@@ -10,11 +10,9 @@ async-bootp bootfile :172.30.1.1 "pcboot"
 
 ---
 
-(global
+(config
   (running_version)
   (async_bootp_section
     (async_bootp_tag)
     (async_bootp_hostname)
-    (async_bootp_data)
-  )
-)
+    (async_bootp_data)))

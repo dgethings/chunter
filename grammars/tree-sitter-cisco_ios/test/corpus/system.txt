@@ -10,12 +10,10 @@ hostname test
 
 ---
 
-(global
+(config
   (running_version)
-  (hostname_section
-    (value)
-  )
-)
+  (hostname
+    (value)))
 
 ===
 alias
@@ -29,14 +27,12 @@ alias exec siib show ip interface brief
 
 ---
 
-(global
+(config
   (running_version)
   (alias_statement
     (mode)
     (alias)
-    (command)
-  )
-)
+    (command)))
 
 ===
 two aliases
@@ -51,16 +47,13 @@ alias exec sibnb show ip bgp neighbor brief
 
 ---
 
-(global
+(config
   (running_version)
   (alias_statement
     (mode)
     (alias)
-    (command)
-  )
+    (command))
   (alias_statement
     (mode)
     (alias)
-    (command)
-  )
-)
+    (command)))

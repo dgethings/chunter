@@ -24,36 +24,27 @@ alias exec sibnb show ip bgp neighbor brief
 
 ---
 
-(global
+(config
   (running_version)
   (service_section
-    (configured_version)
-  )
+    (configured_version))
   (archive_section
-    (file_path)
-  )
+    (file_path))
   (async_bootp_section
     (async_bootp_tag)
     (async_bootp_hostname)
-    (async_bootp_data)
-  )
+    (async_bootp_data))
   (line_section
     (line_type)
     (activation_character
-      (ascii_value)
-    )
-  )
+      (ascii_value)))
   (hostname
-    (value)
-  )
+    (value))
   (alias_statement
     (mode)
     (alias)
-    (command)
-  )
+    (command))
   (alias_statement
     (mode)
     (alias)
-    (command)
-  )
-)
+    (command)))
