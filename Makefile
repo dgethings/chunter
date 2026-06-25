@@ -6,7 +6,7 @@ TS_GRAMMAR := $(TS_DIR)/grammar.js
 TS_STAMP := .ts-gen-stamp
 BIN := bin/chunter
 
-SRCS := $(wildcard main.go cmd/*.go internal/**/*.go)
+SRCS := $(wildcard main.go cmd/*.go) $(shell find internal -name '*.go')
 
 VERSION := $(shell svu current 2>/dev/null || echo "0.0.0")
 NEXT    := $(shell svu next)
