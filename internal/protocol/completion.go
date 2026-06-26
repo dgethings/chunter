@@ -85,4 +85,6 @@ const (
 	CompletionItemKindTypeParameter = CompletionItemKind(25)
 	InsertTextFormatPlainText       = InsertTextFormat(1)
 	InsertTextFormatSnippet         = InsertTextFormat(2)
+	InsertTextModePlainText         = InsertTextMode(1)
+	InsertTextModeSnippet           = InsertTextMode(2)
 )

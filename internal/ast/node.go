@@ -1,20 +1,63 @@
 package ast
 
-import sitter "github.com/tree-sitter/go-tree-sitter"
+import (
+	sitter "github.com/tree-sitter/go-tree-sitter"
+)
 
-// FindNodeAtPosition returns the deepest node (named or anonymous) containing
-// the given zero-indexed line and column, or nil if root is nil. Unlike
-// NamedNodeAtPosition, this may return anonymous leaf nodes such as literal
-// tokens and punctuation.
+// FindNodeAtPosition returns the deepest node (named or anonymous) at the given
+// zero-indexed line and column, or nil if root is nil. It may return anonymous
+// leaf nodes such as literal tokens and punctuation.
+//
+// When the position falls in a gap between tokens — for example the editor
+// cursor sitting just after the space that follows a keyword — it returns the
+// token immediately preceding it on the same line (the node the user just
+// typed) rather than an enclosing ancestor. A position exactly at the end of a
+// token is treated as a clean boundary and resolves to the enclosing node.
 func FindNodeAtPosition(root *sitter.Node, line, col uint) *sitter.Node {
 	if root == nil {
 		return nil
 	}
-	node := root.DescendantForPointRange(
-		sitter.Point{Row: line, Column: col},
-		sitter.Point{Row: line, Column: col},
-	)
+	p := sitter.Point{Row: line, Column: col}
+	node := root.DescendantForPointRange(p, p)
+	if node == nil {
+		return nil
+	}
+	if node.ChildCount() == 0 {
+		return node
+	}
+	prev := deepestLeafEndingAtOrBefore(root, p)
+	if prev != nil && !pointEqual(prev.EndPosition(), p) && prev.EndPosition().Row == p.Row {
+		return prev
+	}
 	return node
+}
+
+// deepestLeafEndingAtOrBefore descends from root into the right-most child whose
+// range ends at or before p, returning the deepest such leaf.
+func deepestLeafEndingAtOrBefore(root *sitter.Node, p sitter.Point) *sitter.Node {
+	cur := root
+	for cur.ChildCount() > 0 {
+		var next *sitter.Node
+		for i := uint(0); i < cur.ChildCount(); i++ {
+			c := cur.Child(i)
+			if c != nil && pointLE(c.EndPosition(), p) {
+				next = c
+			}
+		}
+		if next == nil {
+			break
+		}
+		cur = next
+	}
+	return cur
+}
+
+func pointLE(a, b sitter.Point) bool {
+	return a.Row < b.Row || (a.Row == b.Row && a.Column <= b.Column)
+}
+
+func pointEqual(a, b sitter.Point) bool {
+	return a.Row == b.Row && a.Column == b.Column
 }
 
 func ChildByFieldName(node *sitter.Node, name string) *sitter.Node {

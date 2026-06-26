@@ -36,7 +36,7 @@ func TestHoverHostname(t *testing.T) {
 
 	want := "To specify or modify the hostname for the network server, use the hostname command in global configuration mode."
 	if result.Contents.Value != want {
-		t.Errorf("hover value = %q, want %q", result.Contents.Value, want)
+		t.Errorf("hover value = %q\nwant %q", result.Contents.Value, want)
 	}
 	if result.Contents.Kind != "plaintext" {
 		t.Errorf("hover kind = %q, want %q", result.Contents.Kind, "plaintext")

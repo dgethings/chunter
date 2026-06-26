@@ -2,11 +2,14 @@ package cisco_ios
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
+	"os"
 
-	ts_ci "github.com/dgethings/chunter/grammars/tree-sitter-cisco_ios/bindings/go"
 	"github.com/dgethings/chunter/internal/document"
 	"github.com/dgethings/chunter/internal/keyword"
 	"github.com/dgethings/chunter/internal/protocol"
+	ts_ci "github.com/dgethings/tree-sitter-cisco_ios/bindings/go"
 	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
@@ -21,6 +24,9 @@ func New() *CiscoIOSFeature {
 	lang := sitter.NewLanguage(ts_ci.Language())
 	p := sitter.NewParser()
 	p.SetLanguage(lang)
+	if info, err := os.Stat("../tree-sitter-cisco_ios/src/parser.c"); err == nil {
+		slog.Info("parser version", "cisco_ios", fmt.Sprintf("%v", info.ModTime()))
+	}
 	return &CiscoIOSFeature{
 		parser:  p,
 		trees:   make(map[string]*sitter.Tree),

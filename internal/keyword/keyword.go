@@ -5,7 +5,8 @@ import "github.com/dgethings/chunter/internal/protocol"
 type Keyword struct {
 	Keyword string
 	Description
-	Section string
+	Section  string
+	Snippets []string
 }
 
 type Description struct {
