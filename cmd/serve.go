@@ -5,7 +5,6 @@ import (
 
 	"github.com/creachadair/jrpc2"
 	"github.com/creachadair/jrpc2/channel"
-	"github.com/dgethings/chunter/internal/features/cisco_ios"
 	"github.com/dgethings/chunter/internal/server"
 	"github.com/spf13/cobra"
 )
@@ -16,10 +15,6 @@ var serveCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		srv := server.New(Version)
 
-		feature := cisco_ios.New()
-		defer feature.Close()
-		srv.RegisterFeature(feature)
-
 		assigner, err := srv.Assigner()
 		if err != nil {
 			return err
@@ -27,9 +22,6 @@ var serveCmd = &cobra.Command{
 
 		opts := &jrpc2.ServerOptions{
 			AllowPush: true,
-			// NewContext: func() context.Context {
-			// 	return logger.With(context.Background(), logger.Default())
-			// },
 		}
 
 		ioChannel := channel.Header("")(os.Stdin, os.Stdout)

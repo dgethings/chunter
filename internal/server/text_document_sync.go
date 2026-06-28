@@ -6,6 +6,7 @@ import (
 
 	"github.com/creachadair/jrpc2"
 	"github.com/dgethings/chunter/internal/document"
+	"github.com/dgethings/chunter/internal/features/cisco_ios"
 	"github.com/dgethings/chunter/internal/protocol"
 )
 
@@ -18,6 +19,13 @@ func (s *Server) DidOpen(ctx context.Context, params protocol.DidOpenTextDocumen
 	)
 	s.documents.Put(doc)
 	l := slog.With("language", doc.LanguageID, "message", "didOpen")
+	l.Debug("stored document", "uri", doc.URI, "version", doc.Version)
+
+	if doc.LanguageID == "cisco_ios" {
+		ios := cisco_ios.New()
+		defer ios.Close()
+		s.RegisterFeature(ios)
+	}
 
 	f, err := s.features.Route(doc.LanguageID)
 	if err != nil {
