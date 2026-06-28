@@ -6,7 +6,6 @@ import (
 
 	"github.com/creachadair/jrpc2"
 	"github.com/creachadair/jrpc2/handler"
-	"github.com/dgethings/chunter/internal/logger"
 	"github.com/dgethings/chunter/internal/protocol"
 )
 
@@ -16,7 +15,6 @@ type InitializeParams struct {
 
 func (s *Server) Initialize(ctx context.Context, params InitializeParams) (protocol.InitializeResult, error) {
 	s.setState(stateInitialized)
-	logger.SetLogger()
 	slog.Info("connected to: %s %s", params.ClientInfo.Name, params.ClientInfo.Version)
 	return protocol.InitializeResult{
 		Capabilities: protocol.ServerCapabilities{

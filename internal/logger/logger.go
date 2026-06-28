@@ -5,7 +5,7 @@ import (
 	"os"
 )
 
-func SetLogger() {
-	l := slog.New(slog.NewTextHandler(os.Stderr, nil)).With("lsp", "chunter")
+func SetLogger(lvl *slog.LevelVar) {
+	l := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: lvl})).With("lsp", "chunter")
 	slog.SetDefault(l)
 }
