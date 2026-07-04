@@ -6,6 +6,8 @@ import (
 
 	"github.com/dgethings/chunter/internal/document"
 	"github.com/dgethings/chunter/internal/features"
+	"github.com/dgethings/chunter/internal/features/cisco_ios"
+	"github.com/dgethings/chunter/internal/features/jina2"
 )
 
 type serverState int
@@ -26,11 +28,14 @@ type Server struct {
 }
 
 func New(version string) *Server {
-	return &Server{
+	s := &Server{
 		documents: document.NewStore(),
 		features:  features.NewRouter(),
 		version:   version,
 	}
+	s.RegisterFeature(cisco_ios.New())
+	s.RegisterFeature(jina2.New())
+	return s
 }
 
 func (s *Server) RegisterFeature(f features.Feature) {

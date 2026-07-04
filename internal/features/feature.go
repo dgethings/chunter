@@ -9,6 +9,7 @@ import (
 
 type Feature interface {
 	LanguageID() string
+	Close() error
 
 	DidOpen(ctx context.Context, doc *document.Document) ([]protocol.Diagnostic, error)
 	DidChange(ctx context.Context, doc *document.Document) ([]protocol.Diagnostic, error)

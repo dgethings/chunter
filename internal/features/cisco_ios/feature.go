@@ -39,11 +39,16 @@ func (f *CiscoIOSFeature) LanguageID() string {
 	return "cisco_ios"
 }
 
-func (f *CiscoIOSFeature) Close() {
+func (f *CiscoIOSFeature) Close() error {
 	for _, t := range f.trees {
 		t.Close()
 	}
-	f.parser.Close()
+	f.trees = make(map[string]*sitter.Tree)
+	if f.parser != nil {
+		f.parser.Close()
+		f.parser = nil
+	}
+	return nil
 }
 
 func (f *CiscoIOSFeature) DidOpen(ctx context.Context, doc *document.Document) ([]protocol.Diagnostic, error) {

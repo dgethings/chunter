@@ -36,8 +36,10 @@ func (s *Server) Initialized(ctx context.Context) error {
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
-	s.setState(stateShutDown)
-	return nil
+	if err := s.setState(stateShutDown); err != nil {
+		return err
+	}
+	return s.features.Close()
 }
 
 func (s *Server) Assigner() (jrpc2.Assigner, error) {
