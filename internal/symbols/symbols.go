@@ -38,29 +38,50 @@ type Symbol struct {
 	NameRange protocol.Range // just the name token (Definition / highlight)
 }
 
-// Table is a per-URI index of Symbol definitions. Lookups are read-only and
-// safe for concurrent use; Index/Clear mutate and must not run concurrently
-// with each other on the same URI (the LSP server already serializes per
-// document via didOpen/didChange).
+// Reference is a use of a Symbol's name somewhere in the document. The Kind
+// is the expected definition kind; the Name is the referenced identifier as
+// written; Range covers just the name token (so a diagnostic can be anchored
+// precisely on the reference site).
+type Reference struct {
+	Kind  Kind
+	Name  string
+	URI   string
+	Range protocol.Range
+}
+
+// docIndex holds the symbols and references extracted from a single
+// document. Both slices are in document order.
+type docIndex struct {
+	Symbols    []Symbol
+	References []Reference
+}
+
+// Table is a per-URI index of Symbol definitions and Reference uses. Lookups
+// are read-only and safe for concurrent use; Index/Clear mutate and must not
+// run concurrently with each other on the same URI (the LSP server already
+// serializes per document via didOpen/didChange).
 type Table struct {
 	mu    sync.RWMutex
-	byURI map[string][]Symbol
+	byURI map[string]*docIndex
 }
 
 func NewTable() *Table {
-	return &Table{byURI: make(map[string][]Symbol)}
+	return &Table{byURI: make(map[string]*docIndex)}
 }
 
-// Index walks root, extracts every definition it recognizes, and replaces
-// the stored entry for uri. Call with root=nil to clear.
+// Index walks root, extracts every definition and reference it recognizes,
+// and replaces the stored entry for uri. Call with root=nil to clear.
 func (t *Table) Index(uri string, root *sitter.Node, content []byte) {
-	syms := Extract(uri, root, content)
+	di := &docIndex{
+		Symbols:    Extract(uri, root, content),
+		References: ExtractReferences(uri, root, content),
+	}
 	t.mu.Lock()
-	t.byURI[uri] = syms
+	t.byURI[uri] = di
 	t.mu.Unlock()
 }
 
-// Clear removes all symbols for uri.
+// Clear removes all symbols and references for uri.
 func (t *Table) Clear(uri string) {
 	t.mu.Lock()
 	delete(t.byURI, uri)
@@ -72,7 +93,10 @@ func (t *Table) Clear(uri string) {
 func (t *Table) All(uri string) []Symbol {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	return append([]Symbol(nil), t.byURI[uri]...)
+	if di, ok := t.byURI[uri]; ok {
+		return append([]Symbol(nil), di.Symbols...)
+	}
+	return nil
 }
 
 // Lookup returns symbols matching kind+name in uri.
@@ -80,9 +104,11 @@ func (t *Table) Lookup(uri string, kind Kind, name string) []Symbol {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	var out []Symbol
-	for _, s := range t.byURI[uri] {
-		if s.Kind == kind && s.Name == name {
-			out = append(out, s)
+	if di, ok := t.byURI[uri]; ok {
+		for _, s := range di.Symbols {
+			if s.Kind == kind && s.Name == name {
+				out = append(out, s)
+			}
 		}
 	}
 	return out
@@ -93,9 +119,39 @@ func (t *Table) LookupAny(uri string, name string) []Symbol {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	var out []Symbol
-	for _, s := range t.byURI[uri] {
-		if s.Name == name {
-			out = append(out, s)
+	if di, ok := t.byURI[uri]; ok {
+		for _, s := range di.Symbols {
+			if s.Name == name {
+				out = append(out, s)
+			}
+		}
+	}
+	return out
+}
+
+// ReferencesAll returns every reference indexed for uri, in document order.
+// The returned slice is a copy and may be modified freely.
+func (t *Table) ReferencesAll(uri string) []Reference {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	if di, ok := t.byURI[uri]; ok {
+		return append([]Reference(nil), di.References...)
+	}
+	return nil
+}
+
+// ReferencesLookup returns references in uri whose Kind and Name match. Used
+// by the References LSP feature ("find all usages of this symbol") and by
+// the unused-definition diagnostic ("any reference to this definition?").
+func (t *Table) ReferencesLookup(uri string, kind Kind, name string) []Reference {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	var out []Reference
+	if di, ok := t.byURI[uri]; ok {
+		for _, r := range di.References {
+			if r.Kind == kind && r.Name == name {
+				out = append(out, r)
+			}
 		}
 	}
 	return out
@@ -372,4 +428,156 @@ func nodeRange(n *sitter.Node) protocol.Range {
 		Start: protocol.Position{Line: start.Row, Character: start.Column},
 		End:   protocol.Position{Line: end.Row, Character: end.Column},
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Reference extraction
+// ---------------------------------------------------------------------------
+
+// refSpec describes a command pattern that introduces a reference to a named
+// definition. Leading is the prefix token sequence (starting with the
+// command's first token, including any prec-2 keyword such as `match`,
+// `class`, `access-class`, plus subsequent fixed tokens like `ip address`).
+// ArgIndex is the 0-based offset of the referenced name within the trailing
+// args that follow the Leading prefix.
+//
+// Examples:
+//
+//	{["ip", "access-group"], 0, KindACL}            -> ip access-group NAME in|out
+//	{["match", "ip", "address"], 0, KindACL}        -> match ip address NAME
+//	{["service", "-policy"], 1, KindPolicyMap}      -> service-policy input NAME
+//	    (`service-policy` parses as service_statement(args=["-policy", dir, NAME])
+//	    because `service` is a prec-2 keyword that splits the hyphenated literal)
+//	{["class"], 0, KindClassMap}                    -> class NAME (inside policy-map body)
+type refSpec struct {
+	Leading  []string
+	ArgIndex int
+	Kind     Kind
+}
+
+var refSpecs = []refSpec{
+	{Leading: []string{"ip", "access-group"}, ArgIndex: 0, Kind: KindACL},
+	{Leading: []string{"access-class"}, ArgIndex: 0, Kind: KindACL},
+	{Leading: []string{"match", "ip", "address"}, ArgIndex: 0, Kind: KindACL},
+	{Leading: []string{"ip", "policy", "route-map"}, ArgIndex: 0, Kind: KindRouteMap},
+	{Leading: []string{"service", "-policy"}, ArgIndex: 1, Kind: KindPolicyMap},
+	{Leading: []string{"class"}, ArgIndex: 0, Kind: KindClassMap},
+	{Leading: []string{"switchport", "access", "vlan"}, ArgIndex: 0, Kind: KindVlan},
+}
+
+// ExtractReferences walks root and returns every reference it recognizes, in
+// document order. Returns nil if root is nil.
+//
+// References come from any command-shaped node (command_line or *_statement)
+// whose leading token sequence matches a refSpec. References inside a
+// negated_statement are skipped because they semantically remove a binding
+// rather than establish one (`no ip access-group FOO in` should NOT be
+// flagged as an unresolved reference).
+func ExtractReferences(uri string, root *sitter.Node, content []byte) []Reference {
+	if root == nil {
+		return nil
+	}
+	var refs []Reference
+	walkNamed(root, func(n *sitter.Node) bool {
+		if !isCommandLike(n) {
+			return true
+		}
+		if isNegated(n) {
+			// Skip the negated command itself but keep descending so a
+			// section body containing a negated line still gets its other
+			// references indexed.
+			return true
+		}
+		leading, args, argNodes := leadingAndArgs(n, content)
+		if leading == "" || len(args) == 0 {
+			return true
+		}
+		fullSeq := append([]string{leading}, args...)
+		for _, spec := range refSpecs {
+			if !prefixMatch(fullSeq, spec.Leading) {
+				continue
+			}
+			// argNodes parallels fullSeq[1:] (leading is Child(0); args are
+			// the rest). Index into argNodes by (len(Leading)-1 + ArgIndex).
+			idx := len(spec.Leading) - 1 + spec.ArgIndex
+			if idx >= len(argNodes) {
+				continue
+			}
+			nameNode := argNodes[idx]
+			refs = append(refs, Reference{
+				Kind:  spec.Kind,
+				Name:  textOf(nameNode, content),
+				URI:   uri,
+				Range: nodeRange(nameNode),
+			})
+		}
+		return true
+	})
+	return refs
+}
+
+// isCommandLike reports whether n is a node whose first child is a leading
+// keyword/identifier followed by trailing args. True for command_line and
+// any *_statement rich rule. False for sections, headers, comments, etc.
+func isCommandLike(n *sitter.Node) bool {
+	if n == nil {
+		return false
+	}
+	k := n.Kind()
+	if k == "command_line" {
+		return true
+	}
+	return strings.HasSuffix(k, "_statement")
+}
+
+// isNegated reports whether n (or any ancestor up to the document root) is
+// enclosed in a negated_statement. Used to skip reference extraction for
+// `no <command>` lines.
+func isNegated(n *sitter.Node) bool {
+	for p := n.Parent(); p != nil; p = p.Parent() {
+		if p.Kind() == "negated_statement" {
+			return true
+		}
+	}
+	return false
+}
+
+// leadingAndArgs decomposes a command-like node into (leading token text,
+// trailing arg token texts, trailing arg nodes). The leading token is the
+// node's first child (anonymous keyword for *_statement rules, named
+// identifier for command_line). Trailing args are every named child after
+// the first (anonymous tokens like the keyword literal are skipped).
+func leadingAndArgs(n *sitter.Node, content []byte) (string, []string, []*sitter.Node) {
+	if n == nil || n.ChildCount() == 0 {
+		return "", nil, nil
+	}
+	first := n.Child(0)
+	if first == nil {
+		return "", nil, nil
+	}
+	leading := textOf(first, content)
+	var args []string
+	var argNodes []*sitter.Node
+	for i := uint(1); i < n.ChildCount(); i++ {
+		c := n.Child(i)
+		if c == nil || !c.IsNamed() {
+			continue
+		}
+		args = append(args, textOf(c, content))
+		argNodes = append(argNodes, c)
+	}
+	return leading, args, argNodes
+}
+
+// prefixMatch reports whether a begins with every element of b in order.
+func prefixMatch(a, b []string) bool {
+	if len(a) < len(b) {
+		return false
+	}
+	for i := range b {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

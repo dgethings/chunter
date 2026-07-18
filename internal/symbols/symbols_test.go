@@ -330,3 +330,169 @@ router bgp 100
 		}
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Phase 3: reference extraction
+// ---------------------------------------------------------------------------
+
+func TestExtractReferences_Patterns(t *testing.T) {
+	cases := []struct {
+		name     string
+		src      string
+		wantKind symbols.Kind
+		wantName string
+	}{
+		{"ip access-group", "interface Gi0/0\n ip access-group FOO in\n!\n", symbols.KindACL, "FOO"},
+		{"access-class in line section", "line vty 0 4\n access-class ACL-VTY in\n!\n", symbols.KindACL, "ACL-VTY"},
+		{"match ip address in class-map", "class-map match-any VOICE\n match ip address ACL-VOICE\n!\n", symbols.KindACL, "ACL-VOICE"},
+		{"ip policy route-map in interface", "interface Gi0/0\n ip policy route-map RM-OUT\n!\n", symbols.KindRouteMap, "RM-OUT"},
+		{"class in policy-map body", "policy-map PM\n class VOICE\n  priority\n!\n", symbols.KindClassMap, "VOICE"},
+		{"switchport access vlan", "interface Gi0/0\n switchport access vlan 10\n!\n", symbols.KindVlan, "10"},
+		{"service-policy input", "service-policy input PM-IN\n", symbols.KindPolicyMap, "PM-IN"},
+		{"service-policy output", "service-policy output PM-OUT\n", symbols.KindPolicyMap, "PM-OUT"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root, content := parseRoot(t, tc.src)
+			refs := symbols.ExtractReferences("file:///test", root, content)
+			var found bool
+			for _, r := range refs {
+				if r.Kind == tc.wantKind && r.Name == tc.wantName {
+					found = true
+					if r.Range.Start.Line == 0 && r.Range.Start.Character == 0 &&
+						r.Range.End.Line == 0 && r.Range.End.Character == 0 {
+						t.Errorf("reference %v %q has zero Range", r.Kind, r.Name)
+					}
+				}
+			}
+			if !found {
+				t.Errorf("missing reference %v %q in %d refs: %v", tc.wantKind, tc.wantName, len(refs), refs)
+			}
+		})
+	}
+}
+
+func TestExtractReferences_NegationSkipped(t *testing.T) {
+	src := `interface GigabitEthernet0/0
+ no ip access-group FOO in
+ ip access-group BAR in
+!
+`
+	root, content := parseRoot(t, src)
+	refs := symbols.ExtractReferences("file:///test", root, content)
+	if len(refs) != 1 {
+		t.Fatalf("got %d refs, want 1 (negated line should be skipped): %v", len(refs), refs)
+	}
+	if refs[0].Name != "BAR" {
+		t.Errorf("got ref to %q, want BAR", refs[0].Name)
+	}
+}
+
+func TestExtractReferences_NoFalsePositives(t *testing.T) {
+	// Body commands that should NOT be treated as references.
+	src := `interface GigabitEthernet0/0
+ description uplink
+ shutdown
+ speed 1000
+!
+hostname r1
+!
+no service pad
+!
+`
+	root, content := parseRoot(t, src)
+	refs := symbols.ExtractReferences("file:///test", root, content)
+	if len(refs) != 0 {
+		t.Errorf("got %d refs, want 0: %v", len(refs), refs)
+	}
+}
+
+func TestExtractReferences_Integration(t *testing.T) {
+	src := `!
+interface GigabitEthernet0/0
+ ip access-group ACL-OUT in
+ ip policy route-map RM-OUT
+ switchport access vlan 10
+!
+class-map match-any VOICE
+ match ip address ACL-VOICE
+!
+policy-map QOS
+ class VOICE
+  priority
+!
+service-policy input QOS
+!
+`
+	root, content := parseRoot(t, src)
+	refs := symbols.ExtractReferences("file:///test", root, content)
+
+	// Expect references to: ACL-OUT, RM-OUT, vlan 10, ACL-VOICE, VOICE (class),
+	// QOS (service-policy). 6 total.
+	want := map[symbols.Kind]string{
+		symbols.KindACL:        "ACL-OUT",
+		symbols.KindRouteMap:   "RM-OUT",
+		symbols.KindVlan:       "10",
+		symbols.KindClassMap:   "VOICE",
+		symbols.KindPolicyMap:  "QOS",
+		symbols.KindACL + "_2": "ACL-VOICE",
+	}
+	got := make(map[string]int)
+	for _, r := range refs {
+		key := string(r.Kind)
+		// Disambiguate the two ACL refs by name suffix.
+		if r.Kind == symbols.KindACL {
+			if r.Name == "ACL-VOICE" {
+				key = string(r.Kind) + "_2"
+			}
+		}
+		got[key]++
+		if wantName, ok := want[symbols.Kind(key)]; ok && r.Name != wantName {
+			t.Errorf("kind %s: got ref %q, want %q", key, r.Name, wantName)
+		}
+	}
+	wantCount := 6
+	if len(refs) != wantCount {
+		t.Errorf("got %d refs, want %d: %+v", len(refs), wantCount, refs)
+	}
+}
+
+func TestExtractReferences_NilRoot(t *testing.T) {
+	if got := symbols.ExtractReferences("file:///test", nil, nil); got != nil {
+		t.Errorf("ExtractReferences(nil): got %v, want nil", got)
+	}
+}
+
+func TestTable_References(t *testing.T) {
+	src := `interface Gi0/0
+ ip access-group FOO in
+ ip access-group BAR in
+!
+interface Gi1/0
+ ip access-group FOO in
+!
+`
+	root, content := parseRoot(t, src)
+	tbl := symbols.NewTable()
+	tbl.Index("file:///test", root, content)
+
+	refs := tbl.ReferencesAll("file:///test")
+	if len(refs) != 3 {
+		t.Fatalf("ReferencesAll: got %d, want 3", len(refs))
+	}
+
+	fooRefs := tbl.ReferencesLookup("file:///test", symbols.KindACL, "FOO")
+	if len(fooRefs) != 2 {
+		t.Errorf("ReferencesLookup(FOO): got %d, want 2", len(fooRefs))
+	}
+
+	bazRefs := tbl.ReferencesLookup("file:///test", symbols.KindACL, "BAZ")
+	if len(bazRefs) != 0 {
+		t.Errorf("ReferencesLookup(BAZ): got %d, want 0", len(bazRefs))
+	}
+
+	tbl.Clear("file:///test")
+	if got := tbl.ReferencesAll("file:///test"); len(got) != 0 {
+		t.Errorf("after Clear: got %d refs, want 0", len(got))
+	}
+}
