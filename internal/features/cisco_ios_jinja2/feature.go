@@ -9,6 +9,7 @@ import (
 	"github.com/dgethings/chunter/internal/document"
 	"github.com/dgethings/chunter/internal/keyword"
 	"github.com/dgethings/chunter/internal/protocol"
+	"github.com/dgethings/chunter/internal/symbols"
 	ts "github.com/dgethings/tree-sitter-cisco-ios-jinja2/bindings/go"
 	sitter "github.com/tree-sitter/go-tree-sitter"
 )
@@ -18,6 +19,7 @@ type CiscoIOSFeature struct {
 	trees   map[string]*sitter.Tree
 	lang    *sitter.Language
 	keyword keyword.Keywords
+	symbols *symbols.Table
 }
 
 func New() *CiscoIOSFeature {
@@ -32,6 +34,7 @@ func New() *CiscoIOSFeature {
 		trees:   make(map[string]*sitter.Tree),
 		lang:    lang,
 		keyword: Keywords,
+		symbols: symbols.NewTable(),
 	}
 }
 
@@ -55,6 +58,7 @@ func (f *CiscoIOSFeature) DidOpen(ctx context.Context, doc *document.Document) (
 	tree := f.parser.Parse(doc.Content, nil)
 	if tree != nil {
 		f.trees[doc.URI] = tree
+		f.symbols.Index(doc.URI, tree.RootNode(), doc.Content)
 	}
 	return f.runDiagnostics(doc, tree), nil
 }
@@ -66,6 +70,7 @@ func (f *CiscoIOSFeature) DidChange(ctx context.Context, doc *document.Document)
 		oldTree.Close()
 	}
 	f.trees[doc.URI] = newTree
+	f.symbols.Index(doc.URI, newTree.RootNode(), doc.Content)
 	return f.runDiagnostics(doc, newTree), nil
 }
 
@@ -74,5 +79,6 @@ func (f *CiscoIOSFeature) DidClose(ctx context.Context, doc *document.Document) 
 		t.Close()
 		delete(f.trees, doc.URI)
 	}
+	f.symbols.Clear(doc.URI)
 	return nil
 }
