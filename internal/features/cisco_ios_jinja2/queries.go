@@ -1,4 +1,4 @@
-package cisco_ios
+package cisco_ios_jinja2
 
 const (
 	QueryVersionMismatch = `

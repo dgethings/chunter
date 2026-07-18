@@ -1,4 +1,4 @@
-package cisco_ios
+package cisco_ios_jinja2
 
 import (
 	"context"
@@ -17,15 +17,31 @@ func (f *CiscoIOSFeature) Completion(ctx context.Context, doc *document.Document
 		l.Error("cannot find tree")
 		return nil, nil
 	}
+	slog.Debug("current position", "LINE", pos.Line, "COLOMN", pos.Character)
 
-	section := ast.FindNodeAtPosition(tree.RootNode(), pos.Line, pos.Character)
-	if section == nil {
+	node := ast.FindNodeAtPosition(tree.RootNode(), pos.Line, pos.Character)
+	if node == nil {
 		l.Error("cannot find section", "line", pos.Line, "column", pos.Character)
 		return nil, nil
 	}
-	l.Info("where am i?", "node", section.GrammarName(), "line", pos.Line, "char", pos.Character)
-	kws := f.keyword.InSection(section.GrammarName())
-	items := createItems(kws)
+	l.Debug("where am i?", "node", node.GrammarName(), "kind", node.Kind(), "line", pos.Line, "char", pos.Character)
+
+	switch node.Kind() {
+	case "value", "text", "eos", "comment", "ios_comment":
+		return nil, nil
+	}
+
+	section := "config"
+	for n := node; n != nil; n = n.Parent() {
+		switch n.Kind() {
+		case "interface_section":
+			section = "config-if"
+		case "router_section":
+			section = "config-router"
+		}
+	}
+
+	items := createItems(f.keyword.InSection(section))
 	return items, nil
 }
 

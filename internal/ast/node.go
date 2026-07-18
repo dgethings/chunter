@@ -19,10 +19,16 @@ func FindNodeAtPosition(root *sitter.Node, line, col uint) *sitter.Node {
 	}
 	p := sitter.Point{Row: line, Column: col}
 	node := root.DescendantForPointRange(p, p)
+	if node.GrammarName() == "text" {
+		return node.Parent()
+	}
 	if node == nil {
 		return nil
 	}
 	if node.ChildCount() == 0 {
+		if pointEqual(node.EndPosition(), p) {
+			return node.Parent()
+		}
 		return node
 	}
 	prev := deepestLeafEndingAtOrBefore(root, p)

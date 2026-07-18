@@ -1,11 +1,11 @@
-package cisco_ios_test
+package cisco_ios_jinja2_test
 
 import (
 	"context"
 	"testing"
 
 	"github.com/dgethings/chunter/internal/document"
-	"github.com/dgethings/chunter/internal/features/cisco_ios"
+	"github.com/dgethings/chunter/internal/features/cisco_ios_jinja2"
 	"github.com/dgethings/chunter/internal/protocol"
 )
 
@@ -23,9 +23,9 @@ func TestCompletionWhileTypingValue(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			f := cisco_ios.New()
+			f := cisco_ios_jinja2.New()
 			defer f.Close()
-			doc := document.New("file:///test.cfg", "cisco_ios", 1, []byte(tc.src))
+			doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, []byte(tc.src))
 			if _, err := f.DidOpen(context.Background(), doc); err != nil {
 				t.Fatalf("DidOpen: %v", err)
 			}

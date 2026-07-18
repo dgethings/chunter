@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/dgethings/chunter/internal/ast"
-	ts_ci "github.com/dgethings/tree-sitter-cisco_ios/bindings/go"
+	ts_ci "github.com/dgethings/tree-sitter-cisco-ios-jinja2/bindings/go"
 	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
@@ -15,6 +15,12 @@ const fullConfig = "!\n! version 26.1.0\n!\nversion 26.2.0\n!\narchive\n" +
 	"hostname test\n!\n" +
 	"alias exec siib show ip interface brief\n" +
 	"alias exec sibnb show ip bgp neighbor brief\n!\n"
+
+// interfaceSection exercises an interface_section block (new parser).
+const interfaceSection = "!\ninterface GigabitEthernet0/0\n ip address 10.0.0.1 255.255.255.0\n!\n"
+
+// routerSection exercises a router_section block (new parser).
+const routerSection = "!\nrouter bgp 100\n network 10.0.0.0 0.0.0.255 area 0\n!\n"
 
 func parseRoot(t *testing.T, src string) *sitter.Node {
 	t.Helper()
@@ -45,46 +51,62 @@ func TestFindNodeAtPosition(t *testing.T) {
 		// The motivating example: an incomplete hostname line with no trailing "!".
 		// The hostname node spans only "hostname bob" (cols 0-12), so positions at
 		// or past its end fall back to the config root.
-		{"user/bang", "!\nhostname bob\n", 0, 0, "!"},
+		{"user/bang", "!\nhostname bob\n", 0, 0, "eos"},
 		{"user/hostname_keyword", "!\nhostname bob\n", 1, 0, "hostname"},
 		{"user/hostname_mid", "!\nhostname bob\n", 1, 4, "hostname"},
 		{"user/value", "!\nhostname bob\n", 1, 9, "value"},
-		{"user/complation_accepted", "!\nhostname ", 1, 10, "hostname"},
+		// Cursor just past the trailing space of "hostname ": resolves into the
+		// empty value the user is about to type.
+		{"user/completion_accepted", "!\nhostname ", 1, 10, "value"},
 		{"user/eol_falls_back_to_root", "!\nhostname bob\n", 1, 12, "config"},
 		{"user/trailing_line_falls_back_to_root", "!\nhostname bob\n", 2, 0, "config"},
 
 		// hostname section (system.txt)
-		{"hostname/running_version", "!\n! version 26.1.0\n!\nhostname test\n!\n", 1, 10, "running_version"},
 		{"hostname/keyword", "!\n! version 26.1.0\n!\nhostname test\n!\n", 3, 0, "hostname"},
 		{"hostname/value", "!\n! version 26.1.0\n!\nhostname test\n!\n", 3, 9, "value"},
-		{"hostname/trailing_bang", "!\n! version 26.1.0\n!\nhostname test\n!\n", 4, 0, "!"},
+		// Trailing "!" parses as a named eos node under the new grammar.
+		{"hostname/trailing_eos", "!\n! version 26.1.0\n!\nhostname test\n!\n", 4, 0, "eos"},
 
-		// service section (service.txt)
+		// service section (service.txt): the literal `version` keyword token.
 		{"service/version_keyword", "!\n! version 26.1.0\n!\nversion 26.2.0\n!\n", 3, 0, "version"},
-		{"service/configured_version", "!\n! version 26.1.0\n!\nversion 26.2.0\n!\n", 3, 8, "configured_version"},
 
-		// line section (line.txt)
-		{"line/keyword", "!\n! version 26.1.0\n!\nline console\n   activation-character 127\n!\n", 3, 0, "line"},
-		{"line/console", "!\n! version 26.1.0\n!\nline console\n   activation-character 127\n!\n", 3, 5, "console"},
-		{"line/activation_character", "!\n! version 26.1.0\n!\nline console\n   activation-character 127\n!\n", 4, 3, "activation-character"},
-		{"line/ascii_value", "!\n! version 26.1.0\n!\nline console\n   activation-character 127\n!\n", 4, 24, "ascii_value"},
+		// line section (line.txt) — `line console` is now a generic command_line
+		// whose first identifier is "line"; "console" is its value arg.
+		{"line/keyword", "!\n! version 26.1.0\n!\nline console\n   activation-character 127\n!\n", 3, 0, "identifier"},
+		{"line/ascii_value", "!\n! version 26.1.0\n!\nline console\n   activation-character 127\n!\n", 4, 24, "value"},
 
-		// archive section (archive.txt)
-		{"archive/keyword", "!\n! version 26.1.0\n!\narchive\n   path disk0:someconfig\n   end\n!\n", 3, 0, "archive"},
-		{"archive/file_path", "!\n! version 26.1.0\n!\narchive\n   path disk0:someconfig\n   end\n!\n", 4, 11, "file_path"},
-		{"archive/end", "!\n! version 26.1.0\n!\narchive\n   path disk0:someconfig\n   end\n!\n", 5, 3, "end"},
+		// archive section (archive.txt) — `archive` is a command_line identifier.
+		{"archive/keyword", "!\n! version 26.1.0\n!\narchive\n   path disk0:someconfig\n   end\n!\n", 3, 0, "identifier"},
 
-		// async-bootp section (async-bootp.txt)
-		{"async/keyword", "!\n! version 26.1.0\n!\nasync-bootp bootfile :172.30.1.1 \"pcboot\"\n!\n", 3, 0, "async-bootp"},
-		{"async/hostname", "!\n! version 26.1.0\n!\nasync-bootp bootfile :172.30.1.1 \"pcboot\"\n!\n", 3, 24, "async_bootp_hostname"},
-		{"async/data", "!\n! version 26.1.0\n!\nasync-bootp bootfile :172.30.1.1 \"pcboot\"\n!\n", 3, 33, "async_bootp_data"},
+		// async-bootp section (async-bootp.txt) — the leading "async" token is a
+		// command_line identifier; the remainder lands in a `text` node whose
+		// parent is the config root.
+		{"async/keyword", "!\n! version 26.1.0\n!\nasync-bootp bootfile :172.30.1.1 \"pcboot\"\n!\n", 3, 0, "identifier"},
+
+		// interface_section (interface.txt) — newly covered.
+		// The literal `interface` keyword is an anonymous token under interface_header.
+		{"interface/keyword", interfaceSection, 1, 0, "interface"},
+		// The device name lives in a named interface_name field of interface_header.
+		{"interface/name", interfaceSection, 1, 10, "interface_name"},
+		// Body command `ip address ...` is a command_line; its first identifier "ip".
+		{"interface/sub_command_name", interfaceSection, 2, 1, "identifier"},
+		// The first argument "address" sits inside a value leaf.
+		{"interface/sub_command_arg", interfaceSection, 2, 6, "value"},
+
+		// router_section (router.txt) — newly covered.
+		// The literal `router` keyword is an anonymous token under router_header.
+		{"router/protocol", routerSection, 1, 0, "router"},
+		// The process-id ("100") is the value field of router_header.
+		{"router/process_id", routerSection, 1, 11, "value"},
+		// Body `network ...` statement's first argument is a value leaf.
+		{"router/network_arg", routerSection, 2, 9, "value"},
 
 		// full config (full-config.txt) - cross-section checks
-		{"full/file_path", fullConfig, 6, 8, "file_path"},
-		{"full/ascii_value", fullConfig, 12, 24, "ascii_value"},
+		{"full/file_path", fullConfig, 6, 8, "value"},
+		{"full/ascii_value", fullConfig, 12, 24, "value"},
 		{"full/hostname", fullConfig, 14, 0, "hostname"},
-		{"full/alias_mode", fullConfig, 16, 6, "exec"},
-		{"full/alias_command", fullConfig, 17, 16, "command"},
+		{"full/alias_mode", fullConfig, 16, 6, "value"},
+		{"full/alias_command", fullConfig, 17, 16, "command_line"},
 	}
 
 	for _, tc := range cases {

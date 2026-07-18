@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/dgethings/chunter/internal/document"
-	"github.com/dgethings/chunter/internal/features/cisco_ios"
+	"github.com/dgethings/chunter/internal/features/cisco_ios_jinja2"
 	"github.com/spf13/cobra"
 )
 
@@ -20,10 +20,10 @@ var checkCmd = &cobra.Command{
 			return fmt.Errorf("reading file: %w", err)
 		}
 
-		feature := cisco_ios.New()
+		feature := cisco_ios_jinja2.New()
 		defer feature.Close()
 
-	doc := document.New(path, "cisco_ios", 0, content)
+	doc := document.New(path, "cisco_ios_jinja2", 0, content)
 	diagnostics, err := feature.DidOpen(cmd.Context(), doc)
 	if err != nil {
 		return fmt.Errorf("parsing file: %w", err)

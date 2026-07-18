@@ -1,4 +1,4 @@
-package cisco_ios
+package cisco_ios_jinja2
 
 import (
 	"context"
@@ -17,7 +17,11 @@ func (f *CiscoIOSFeature) Hover(ctx context.Context, doc *document.Document, pos
 	if node == nil {
 		return nil, nil
 	}
-	keyword, ok := f.keyword.Lookup(node.Kind())
+	name := node.Kind()
+	if name == "identifier" {
+		name = string(doc.Content[node.StartByte():node.EndByte()])
+	}
+	keyword, ok := f.keyword.Lookup(name)
 	if !ok {
 		return nil, nil
 	}

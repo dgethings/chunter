@@ -6,8 +6,7 @@ import (
 
 	"github.com/dgethings/chunter/internal/document"
 	"github.com/dgethings/chunter/internal/features"
-	"github.com/dgethings/chunter/internal/features/cisco_ios"
-	"github.com/dgethings/chunter/internal/features/jina2"
+	"github.com/dgethings/chunter/internal/features/cisco_ios_jinja2"
 )
 
 type serverState int
@@ -33,8 +32,7 @@ func New(version string) *Server {
 		features:  features.NewRouter(),
 		version:   version,
 	}
-	s.RegisterFeature(cisco_ios.New())
-	s.RegisterFeature(jina2.New())
+	s.RegisterFeature(cisco_ios_jinja2.New())
 	return s
 }
 

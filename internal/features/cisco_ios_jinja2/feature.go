@@ -1,4 +1,4 @@
-package cisco_ios
+package cisco_ios_jinja2
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/dgethings/chunter/internal/document"
 	"github.com/dgethings/chunter/internal/keyword"
 	"github.com/dgethings/chunter/internal/protocol"
-	ts_ci "github.com/dgethings/tree-sitter-cisco_ios/bindings/go"
+	ts "github.com/dgethings/tree-sitter-cisco-ios-jinja2/bindings/go"
 	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
@@ -21,10 +21,10 @@ type CiscoIOSFeature struct {
 }
 
 func New() *CiscoIOSFeature {
-	lang := sitter.NewLanguage(ts_ci.Language())
+	lang := sitter.NewLanguage(ts.Language())
 	p := sitter.NewParser()
 	p.SetLanguage(lang)
-	if info, err := os.Stat("../tree-sitter-cisco_ios/src/parser.c"); err == nil {
+	if info, err := os.Stat("../tree-sitter-cisco-ios-jinja2/src/parser.c"); err == nil {
 		slog.Info("parser version", "cisco_ios", fmt.Sprintf("%v", info.ModTime()))
 	}
 	return &CiscoIOSFeature{
@@ -36,7 +36,7 @@ func New() *CiscoIOSFeature {
 }
 
 func (f *CiscoIOSFeature) LanguageID() string {
-	return "cisco_ios"
+	return "cisco_ios_jinja2"
 }
 
 func (f *CiscoIOSFeature) Close() error {
