@@ -15,10 +15,12 @@ type InitializeResult struct {
 }
 
 type ServerCapabilities struct {
-	TextDocumentSync              int               `json:"textDocumentSync"`
-	HoverProvider                 bool              `json:"hoverProvider"`
-	DefinitionProvider            bool              `json:"definitionProvider"`
-	CompletionProvider            *CompletionOptions `json:"completionProvider,omitempty"`
+	TextDocumentSync      int                 `json:"textDocumentSync"`
+	HoverProvider         bool                `json:"hoverProvider"`
+	DefinitionProvider    bool                `json:"definitionProvider"`
+	ReferencesProvider    bool                `json:"referencesProvider"`
+	DocumentSymbolProvider bool               `json:"documentSymbolProvider"`
+	CompletionProvider    *CompletionOptions  `json:"completionProvider,omitempty"`
 }
 
 type CompletionOptions struct {

@@ -18,4 +18,6 @@ type Feature interface {
 	Completion(ctx context.Context, doc *document.Document, pos protocol.Position) ([]protocol.CompletionItem, error)
 	Hover(ctx context.Context, doc *document.Document, pos protocol.Position) (*protocol.HoverResult, error)
 	Definition(ctx context.Context, doc *document.Document, pos protocol.Position) ([]protocol.Location, error)
+	References(ctx context.Context, doc *document.Document, pos protocol.Position, includeDeclaration bool) ([]protocol.Location, error)
+	DocumentSymbol(ctx context.Context, doc *document.Document) ([]protocol.DocumentSymbol, error)
 }

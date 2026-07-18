@@ -18,10 +18,12 @@ func (s *Server) Initialize(ctx context.Context, params InitializeParams) (proto
 	slog.Info("connected to: %s %s", params.ClientInfo.Name, params.ClientInfo.Version)
 	return protocol.InitializeResult{
 		Capabilities: protocol.ServerCapabilities{
-			TextDocumentSync:   1,
-			HoverProvider:      true,
-			DefinitionProvider: true,
-			CompletionProvider: &protocol.CompletionOptions{},
+			TextDocumentSync:       1,
+			HoverProvider:          true,
+			DefinitionProvider:     true,
+			ReferencesProvider:     true,
+			DocumentSymbolProvider: true,
+			CompletionProvider:     &protocol.CompletionOptions{},
 		},
 		ServerInfo: protocol.ServerInfo{
 			Name:    "chunter",
@@ -44,14 +46,16 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 func (s *Server) Assigner() (jrpc2.Assigner, error) {
 	return handler.Map{
-		"initialize":              handler.New(s.Initialize),
-		"initialized":             handler.New(s.Initialized),
-		"shutdown":                handler.New(s.Shutdown),
-		"textDocument/didOpen":    handler.New(s.DidOpen),
-		"textDocument/didChange":  handler.New(s.DidChange),
-		"textDocument/didClose":   handler.New(s.DidClose),
-		"textDocument/completion": handler.New(s.Completion),
-		"textDocument/hover":      handler.New(s.Hover),
-		"textDocument/definition": handler.New(s.Definition),
+		"initialize":                handler.New(s.Initialize),
+		"initialized":               handler.New(s.Initialized),
+		"shutdown":                  handler.New(s.Shutdown),
+		"textDocument/didOpen":      handler.New(s.DidOpen),
+		"textDocument/didChange":    handler.New(s.DidChange),
+		"textDocument/didClose":     handler.New(s.DidClose),
+		"textDocument/completion":   handler.New(s.Completion),
+		"textDocument/hover":        handler.New(s.Hover),
+		"textDocument/definition":   handler.New(s.Definition),
+		"textDocument/references":   handler.New(s.References),
+		"textDocument/documentSymbol": handler.New(s.DocumentSymbol),
 	}, nil
 }
