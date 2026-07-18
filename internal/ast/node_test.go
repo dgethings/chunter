@@ -70,9 +70,10 @@ func TestFindNodeAtPosition(t *testing.T) {
 		// service section (service.txt): the literal `version` keyword token.
 		{"service/version_keyword", "!\n! version 26.1.0\n!\nversion 26.2.0\n!\n", 3, 0, "version"},
 
-		// line section (line.txt) — `line console` is now a generic command_line
-		// whose first identifier is "line"; "console" is its value arg.
-		{"line/keyword", "!\n! version 26.1.0\n!\nline console\n   activation-character 127\n!\n", 3, 0, "identifier"},
+		// line section (line.txt) — `line` is now a prec-2 keyword token
+		// (`line_kw`) because line_section is a hierarchical section. The body
+		// sub-commands (e.g. activation-character) parse inside the section.
+		{"line/keyword", "!\n! version 26.1.0\n!\nline console\n   activation-character 127\n!\n", 3, 0, "line_kw"},
 		{"line/ascii_value", "!\n! version 26.1.0\n!\nline console\n   activation-character 127\n!\n", 4, 24, "value"},
 
 		// archive section (archive.txt) — `archive` is a command_line identifier.
