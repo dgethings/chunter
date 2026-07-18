@@ -5,7 +5,6 @@
 package symbols
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
 	"sync"
@@ -155,6 +154,60 @@ func (t *Table) ReferencesLookup(uri string, kind Kind, name string) []Reference
 		}
 	}
 	return out
+}
+
+// SymbolAt returns a pointer to the Symbol whose NameRange contains pos, or
+// nil. Used by Go-To-Definition when the cursor is already on a definition
+// site (most editors return the definition itself in that case).
+func (t *Table) SymbolAt(uri string, pos protocol.Position) *Symbol {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	di, ok := t.byURI[uri]
+	if !ok {
+		return nil
+	}
+	for i := range di.Symbols {
+		s := &di.Symbols[i]
+		if rangeContains(s.NameRange, pos) {
+			return s
+		}
+	}
+	return nil
+}
+
+// ReferenceAt returns a pointer to the Reference whose Range contains pos,
+// or nil. Used by Go-To-Definition to identify the reference name token the
+// user clicked on and look up its target definition.
+func (t *Table) ReferenceAt(uri string, pos protocol.Position) *Reference {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	di, ok := t.byURI[uri]
+	if !ok {
+		return nil
+	}
+	for i := range di.References {
+		r := &di.References[i]
+		if rangeContains(r.Range, pos) {
+			return r
+		}
+	}
+	return nil
+}
+
+// rangeContains reports whether pos lies within r (inclusive of the start,
+// exclusive of the end, matching the half-open byte ranges tree-sitter
+// produces and the LSP Position semantics).
+func rangeContains(r protocol.Range, pos protocol.Position) bool {
+	if pos.Line < r.Start.Line || pos.Line > r.End.Line {
+		return false
+	}
+	if pos.Line == r.Start.Line && pos.Character < r.Start.Character {
+		return false
+	}
+	if pos.Line == r.End.Line && pos.Character >= r.End.Character {
+		return false
+	}
+	return true
 }
 
 // Extract walks root and returns every symbol it recognizes, in document
@@ -330,6 +383,12 @@ func extractACL(uri string, n *sitter.Node, content []byte) (Symbol, bool) {
 	// `-list ...` falls through to a sibling text node because `access-list`
 	// is not a prec-2 keyword — see the grammar comment above the
 	// *_statement rich rules).
+	//
+	// The Symbol.Name is just the number (e.g. "101"), not "access-list 101",
+	// because that is the form every reference uses (`ip access-group 101
+	// in`, `access-class 101 in`, `match ip address 101`). The Kind
+	// discriminator (KindACL) prevents collisions with non-ACL symbols that
+	// happen to share the same numeric name.
 	if leadingIdent == "access" {
 		textSibling := n.NextNamedSibling()
 		if textSibling == nil || textSibling.Kind() != "text" {
@@ -340,11 +399,7 @@ func extractACL(uri string, n *sitter.Node, content []byte) (Symbol, bool) {
 		if m == nil {
 			return Symbol{}, false
 		}
-		// Reconstruct the full ACL identifier "access-list" + number for the
-		// name (so references via `ip access-group 101` resolve correctly).
-		// Range covers the command_line (access) + the text node; NameRange
-		// covers just the access-list token + number in the text node.
-		name := fmt.Sprintf("access-list %s", m[1])
+		name := m[1]
 		rangeStart := n.StartPosition()
 		rangeEnd := textSibling.EndPosition()
 		return Symbol{

@@ -138,7 +138,7 @@ func TestExtract_ACLs(t *testing.T) {
 		{
 			name: "numbered ACL",
 			src:  "access-list 101 permit ip any any\n!\n",
-			want: []string{"access-list 101"},
+			want: []string{"101"},
 		},
 		{
 			name: "mixed ACL forms",
@@ -146,7 +146,7 @@ func TestExtract_ACLs(t *testing.T) {
 				"access-list 100 permit ip any any\n" +
 				"ip access-list extended NAMED2\n" +
 				"access-list 101 deny tcp any any\n",
-			want: []string{"NAMED", "access-list 100", "NAMED2", "access-list 101"},
+			want: []string{"NAMED", "100", "NAMED2", "101"},
 		},
 	}
 	for _, tc := range cases {
