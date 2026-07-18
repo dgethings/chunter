@@ -18,8 +18,13 @@ VERSION := $(shell svu current 2>/dev/null || echo "0.0.0")
 NEXT    := $(shell svu next)
 ROOT_DIR := $(shell pwd)
 CC_WRAPPER := $(ROOT_DIR)/scripts/cc
+# Fall back to the `gh` CLI's keyring token when GITHUB_TOKEN isn't in the
+# environment. Recursive expansion (=) means `gh auth token` only runs when
+# the variable is actually referenced (e.g. by `make release`).
+GITHUB_TOKEN ?= $(shell gh auth token)
 
 export CC_WRAPPER
+export GITHUB_TOKEN
 
 all: $(BIN)
 
