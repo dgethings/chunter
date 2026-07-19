@@ -3,6 +3,7 @@ package cisco_ios_jinja2
 import (
 	"context"
 	"log/slog"
+	"regexp"
 
 	"github.com/dgethings/chunter/internal/ast"
 	"github.com/dgethings/chunter/internal/document"
@@ -45,15 +46,36 @@ func (f *CiscoIOSFeature) Completion(ctx context.Context, doc *document.Document
 	return items, nil
 }
 
+// placeholderDefaultRe matches LSP snippet placeholders of the form ${N:default}
+// and strips the default text, leaving an empty tabstop ${N}.
+//
+// Neovim's vim.snippet selects non-empty tabstops via a key sequence that some
+// completion engines (notably blink.cmp on Neovim 0.12) leave in INSERT mode
+// rather than SELECT mode, so typing at the placeholder inserts before the
+// default text instead of replacing it (e.g. `hostname ${1:name}` yielded
+// `hostname r1name` instead of `hostname r1`). Empty tabstops use a different
+// code path that drops the cursor in INSERT mode at the tabstop position, so
+// typing inserts at the correct spot.
+var placeholderDefaultRe = regexp.MustCompile(`\$\{(\d+):[^}]*\}`)
+
+// stripPlaceholderDefaults rewrites a snippet by removing the default text from
+// every ${N:default} placeholder while leaving the tabstop itself intact.
+func stripPlaceholderDefaults(snippet string) string {
+	return placeholderDefaultRe.ReplaceAllString(snippet, "${$1}")
+}
+
 func createItems(kws keyword.Keywords) []protocol.CompletionItem {
 	items := []protocol.CompletionItem{}
 	format := protocol.InsertTextFormatSnippet
 	kind := protocol.CompletionItemKindKeyword
 	for _, kw := range kws {
-		for _, snippet := range kw.Snippets {
+		for _, s := range kw.Snippets {
+			snippet := stripPlaceholderDefaults(s)
+			filterText := kw.Keyword
 			items = append(items, protocol.CompletionItem{
 				Label:            kw.Keyword,
 				Documentation:    kw.Description.Value,
+				FilterText:       &filterText,
 				InsertText:       &snippet,
 				InsertTextFormat: &format,
 				Kind:             &kind,
