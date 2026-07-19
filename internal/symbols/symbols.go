@@ -5,7 +5,6 @@
 package symbols
 
 import (
-	"regexp"
 	"strings"
 	"sync"
 
@@ -216,12 +215,11 @@ func rangeContains(r protocol.Range, pos protocol.Position) bool {
 // Symbols come from two sources:
 //   - Hierarchical sections (interface_section, router_section,
 //     route_map_section, class_map_section, policy_map_section, vlan_section,
-//     line_section, redundancy_section) — each contributes one Symbol via
-//     the header's `name` field (or a synthesized name for line/redundancy).
-//   - Flat ACL definitions: `ip access-list <standard|extended> NAME` and
-//     the numbered form `access-list <N> permit|deny ...` (the latter
-//     parses as `command_line(access) + text(-list ...)`; a regex recovers
-//     the number from the text node).
+//     line_section, redundancy_section, ip_access_list_section) — each
+//     contributes one Symbol via the header's `name` field (or a synthesized
+//     name for line/redundancy).
+//   - Flat numbered ACL statements (`access-list <N> permit|deny ...`),
+//     which parse as access_list_statement nodes — see extractACL.
 func Extract(uri string, root *sitter.Node, content []byte) []Symbol {
 	if root == nil {
 		return nil
@@ -281,6 +279,15 @@ var sectionSpecs = []sectionSpec{
 			return "redundancy", nodeRange(header)
 		},
 	},
+	// Named ACLs (`ip access-list <standard|extended> NAME { ... }`). This
+	// entry was deferred from Phase 1 because the grammar could not promote
+	// `access-list` to a prec-2 keyword without colliding with every other
+	// `ip ...` line; Phase 1 therefore routed named ACLs through flat
+	// command_line extraction. Phase A in the sibling grammar repo (commit
+	// ab0d95a) resolved the collision via the same `_cmd_arg` alias trick
+	// used by the other six section keywords, so named ACLs now parse as a
+	// real hierarchical section with a header carrying the `name` field.
+	{sectionKind: "ip_access_list_section", kind: KindACL, headerKind: "ip_access_list_header", nameField: "name"},
 }
 
 func extractSection(uri string, n *sitter.Node, content []byte) (Symbol, bool) {
@@ -341,82 +348,39 @@ func synthesizeLineName(header *sitter.Node, content []byte) (string, protocol.R
 	return strings.Join(parts, "-"), nodeRange(header)
 }
 
-// numberedACLRe matches the `text` companion of a flat numbered ACL line.
-// `access-list 101 permit ip any any` parses as
-// `command_line(access) + text("-list 101 permit ip any any")`. The regex
-// captures the ACL number after the leading `-list`.
-var numberedACLRe = regexp.MustCompile(`^-list\s+(\S+)`)
-
+// extractACL extracts a Symbol from an `access_list_statement` node (the
+// numbered ACL form: `access-list <N> permit|deny ...`). The numbered ACL
+// ranges are 1-99 (standard), 100-199 (extended), and historical ranges
+// (200-299, etc.); only the leading number contributes the Symbol.Name
+// because that is what every reference form (`ip access-group N in`,
+// `access-class N in`, `match ip address N`) cites.
+//
+// The named ACL form (`ip access-list <standard|extended> NAME`) is handled
+// by the sectionSpec table via ip_access_list_section — see that entry for
+// background on the Phase A grammar promotion.
 func extractACL(uri string, n *sitter.Node, content []byte) (Symbol, bool) {
-	if n.Kind() != "command_line" {
+	if n.Kind() != "access_list_statement" {
 		return Symbol{}, false
 	}
-	nameNode := n.ChildByFieldName("name")
-	if nameNode == nil {
+	// access_list_statement = access_list_kw + repeat(field("arg", ...)).
+	// Child(0) is the leading keyword; the trailing named children are the
+	// ACL number, action, protocol, source/dest, etc. Only the number
+	// contributes the Symbol.Name; downstream LSP features don't need the
+	// rest for symbol resolution.
+	if n.NamedChildCount() < 2 {
 		return Symbol{}, false
 	}
-	leadingIdent := textOf(nameNode, content)
-
-	// Named ACL: `ip access-list <standard|extended> NAME`.
-	// Parses as command_line(ip) + arg(access-list) + arg(standard|extended)
-	// + arg(NAME).
-	if leadingIdent == "ip" {
-		args := namedArgs(n)
-		if len(args) >= 3 && textOf(args[0], content) == "access-list" {
-			nameArg := args[2]
-			sym := Symbol{
-				Kind:      KindACL,
-				Name:      textOf(nameArg, content),
-				URI:       uri,
-				Range:     nodeRange(n),
-				NameRange: nodeRange(nameArg),
-			}
-			return sym, true
-		}
+	nameArg := n.NamedChild(1)
+	if nameArg == nil {
 		return Symbol{}, false
 	}
-
-	// Numbered ACL: `access-list <N> permit|deny ...`.
-	// Parses as command_line(access) + sibling text("-list <N> ..."). The
-	// text node is a sibling of the command_line at the config level
-	// (command_line only owns the leading `access` identifier; the residual
-	// `-list ...` falls through to a sibling text node because `access-list`
-	// is not a prec-2 keyword — see the grammar comment above the
-	// *_statement rich rules).
-	//
-	// The Symbol.Name is just the number (e.g. "101"), not "access-list 101",
-	// because that is the form every reference uses (`ip access-group 101
-	// in`, `access-class 101 in`, `match ip address 101`). The Kind
-	// discriminator (KindACL) prevents collisions with non-ACL symbols that
-	// happen to share the same numeric name.
-	if leadingIdent == "access" {
-		textSibling := n.NextNamedSibling()
-		if textSibling == nil || textSibling.Kind() != "text" {
-			return Symbol{}, false
-		}
-		textContent := textOf(textSibling, content)
-		m := numberedACLRe.FindStringSubmatch(textContent)
-		if m == nil {
-			return Symbol{}, false
-		}
-		name := m[1]
-		rangeStart := n.StartPosition()
-		rangeEnd := textSibling.EndPosition()
-		return Symbol{
-			Kind: KindACL,
-			Name: name,
-			URI:  uri,
-			Range: protocol.Range{
-				Start: protocol.Position{Line: rangeStart.Row, Character: rangeStart.Column},
-				End:   protocol.Position{Line: rangeEnd.Row, Character: rangeEnd.Column},
-			},
-			NameRange: protocol.Range{
-				Start: protocol.Position{Line: rangeStart.Row, Character: rangeStart.Column},
-				End:   protocol.Position{Line: rangeEnd.Row, Character: rangeEnd.Column},
-			},
-		}, true
-	}
-	return Symbol{}, false
+	return Symbol{
+		Kind:      KindACL,
+		Name:      textOf(nameArg, content),
+		URI:       uri,
+		Range:     nodeRange(n),
+		NameRange: nodeRange(nameArg),
+	}, true
 }
 
 // walkNamed depth-first traverses the named-children subtree of n, invoking

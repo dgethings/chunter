@@ -143,10 +143,24 @@ func TestExtract_ACLs(t *testing.T) {
 		{
 			name: "mixed ACL forms",
 			src: "ip access-list standard NAMED\n" +
+				"!\n" +
 				"access-list 100 permit ip any any\n" +
+				"!\n" +
 				"ip access-list extended NAMED2\n" +
+				"!\n" +
 				"access-list 101 deny tcp any any\n",
 			want: []string{"NAMED", "100", "NAMED2", "101"},
+		},
+		// Phase B (PLAN-IP-ACCESS-LIST.md): documents that numbered ACLs
+		// now route through the dedicated access_list_statement AST node
+		// rather than the old command_line(access) + text sibling shape.
+		// The assertion (name "101", kind KindACL) intentionally mirrors
+		// the numbered_ACL case above — both AST node types now contribute
+		// ACL symbols.
+		{
+			name: "numbered ACL via access_list_statement node",
+			src:  "access-list 101 permit ip any any\n!\n",
+			want: []string{"101"},
 		},
 	}
 	for _, tc := range cases {
