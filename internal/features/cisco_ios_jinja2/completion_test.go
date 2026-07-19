@@ -2,12 +2,18 @@ package cisco_ios_jinja2_test
 
 import (
 	"context"
+	"regexp"
 	"testing"
 
 	"github.com/dgethings/chunter/internal/document"
 	"github.com/dgethings/chunter/internal/features/cisco_ios_jinja2"
 	"github.com/dgethings/chunter/internal/protocol"
 )
+
+// placeholderDefaultRe matches LSP snippet placeholders of the form ${N:default}
+// where N is a tabstop index and default is non-empty. Mirrors the regex in
+// completion.go so this test fails if the production regex lets one through.
+var placeholderDefaultRe = regexp.MustCompile(`\$\{(\d+):[^}]*\}`)
 
 func TestCompletionWhileTypingValue(t *testing.T) {
 	cases := []struct {
@@ -38,5 +44,87 @@ func TestCompletionWhileTypingValue(t *testing.T) {
 				t.Errorf("expected no keyword suggestions while typing a value, got %d", len(items))
 			}
 		})
+	}
+}
+
+// TestCompletionSnippetsStripPlaceholderDefaults verifies that completion items
+// never emit ${N:default} placeholders in their insertText. vim.snippet's
+// selection of non-empty placeholders can leave the editor in INSERT mode
+// instead of SELECT mode on some clients (notably blink.cmp on Neovim 0.12),
+// which causes typed characters to insert before the default text rather than
+// replacing it. See completion.go for the full rationale.
+func TestCompletionSnippetsStripPlaceholderDefaults(t *testing.T) {
+	f := cisco_ios_jinja2.New()
+	defer f.Close()
+
+	src := []byte("!\n")
+	doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, src)
+	if _, err := f.DidOpen(context.Background(), doc); err != nil {
+		t.Fatalf("DidOpen: %v", err)
+	}
+
+	items, err := f.Completion(context.Background(), doc, protocol.Position{Line: 1, Character: 0})
+	if err != nil {
+		t.Fatalf("Completion: %v", err)
+	}
+	if len(items) == 0 {
+		t.Fatalf("expected at least one completion item")
+	}
+
+	for _, item := range items {
+		if item.InsertText == nil {
+			t.Errorf("item %q: missing insertText", item.Label)
+			continue
+		}
+		if loc := placeholderDefaultRe.FindStringIndex(*item.InsertText); loc != nil {
+			t.Errorf("item %q: insertText %q still contains a ${N:default} placeholder at %v",
+				item.Label, *item.InsertText, loc)
+		}
+		if item.FilterText == nil {
+			t.Errorf("item %q: missing filterText", item.Label)
+			continue
+		}
+		if *item.FilterText != item.Label {
+			t.Errorf("item %q: filterText %q != label %q",
+				item.Label, *item.FilterText, item.Label)
+		}
+	}
+}
+
+// TestCompletionHostnameSnippetHasEmptyTabstop pins the exact insertText we
+// emit for the hostname keyword after the fix: the original data file ships
+// `hostname ${1:name}` but the LSP response must drop the `name` default so
+// editors land the cursor in INSERT mode at the tabstop, fixing the bug where
+// typing `r1` produced `hostname r1name` instead of `hostname r1`.
+func TestCompletionHostnameSnippetHasEmptyTabstop(t *testing.T) {
+	f := cisco_ios_jinja2.New()
+	defer f.Close()
+
+	doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, []byte("!\n"))
+	if _, err := f.DidOpen(context.Background(), doc); err != nil {
+		t.Fatalf("DidOpen: %v", err)
+	}
+
+	items, err := f.Completion(context.Background(), doc, protocol.Position{Line: 1, Character: 0})
+	if err != nil {
+		t.Fatalf("Completion: %v", err)
+	}
+
+	var hostnameItem *protocol.CompletionItem
+	for i := range items {
+		if items[i].Label == "hostname" {
+			hostnameItem = &items[i]
+			break
+		}
+	}
+	if hostnameItem == nil {
+		t.Fatalf("hostname completion item not found")
+	}
+	if hostnameItem.InsertText == nil {
+		t.Fatalf("hostname item has no insertText")
+	}
+	want := "hostname ${1}"
+	if got := *hostnameItem.InsertText; got != want {
+		t.Errorf("hostname insertText = %q, want %q", got, want)
 	}
 }
