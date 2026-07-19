@@ -196,3 +196,178 @@ func TestCompletionNoFormHasDistinctLabel(t *testing.T) {
 		t.Errorf("expected label %q (negation form)", "no downward-compatible-config")
 	}
 }
+
+// findItemByLabel returns a pointer to the first completion item whose Label
+// matches, or nil if none is found.
+func findItemByLabel(items []protocol.CompletionItem, label string) *protocol.CompletionItem {
+	for i := range items {
+		if items[i].Label == label {
+			return &items[i]
+		}
+	}
+	return nil
+}
+
+// TestCompletionSectionAware_InterfaceExcludesConfigKeywords pins the
+// section-aware filtering: when the cursor sits inside an interface block,
+// only config-if keywords are surfaced, while top-level config keywords
+// (e.g. hostname) must be filtered out.
+//
+// We assert on the ip rarp-server item rather than clock: although both are
+// Section "config-if", clock's snippets have no ${N} placeholder so its
+// derived label is the full "clock autoactive preferpassive prefer" / "no
+// clock" — not "clock". ip rarp-server ships "ip rarp-server ${1:ip-address}",
+// whose label cleanly reduces to "ip rarp-server".
+//
+// The cursor position that resolves to the interface_section node is
+// line 2, char 1 (the `c` token on the indented sub-command line).
+func TestCompletionSectionAware_InterfaceExcludesConfigKeywords(t *testing.T) {
+	f := cisco_ios_jinja2.New()
+	defer f.Close()
+
+	src := "!\ninterface GigabitEthernet0/0\n c\n!\n"
+	doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, []byte(src))
+	if _, err := f.DidOpen(context.Background(), doc); err != nil {
+		t.Fatalf("DidOpen: %v", err)
+	}
+	items, err := f.Completion(context.Background(), doc, protocol.Position{Line: 2, Character: 1})
+	if err != nil {
+		t.Fatalf("Completion: %v", err)
+	}
+	if len(items) == 0 {
+		t.Fatalf("expected at least one completion item inside the interface block")
+	}
+	if findItemByLabel(items, "ip rarp-server") == nil {
+		t.Errorf("expected ip rarp-server (Section config-if) inside interface block")
+	}
+	if findItemByLabel(items, "hostname") != nil {
+		t.Errorf("hostname (Section config) must NOT appear inside interface block")
+	}
+}
+
+// TestCompletionSectionAware_TopLevelExcludesInterfaceKeywords is the inverse
+// of the interface test: at top-level config the cursor must surface config
+// keywords (hostname) and exclude config-if keywords (ip rarp-server).
+func TestCompletionSectionAware_TopLevelExcludesInterfaceKeywords(t *testing.T) {
+	f := cisco_ios_jinja2.New()
+	defer f.Close()
+
+	doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, []byte("!\n"))
+	if _, err := f.DidOpen(context.Background(), doc); err != nil {
+		t.Fatalf("DidOpen: %v", err)
+	}
+	items, err := f.Completion(context.Background(), doc, protocol.Position{Line: 1, Character: 0})
+	if err != nil {
+		t.Fatalf("Completion: %v", err)
+	}
+	if len(items) == 0 {
+		t.Fatalf("expected at least one completion item at top level")
+	}
+	if findItemByLabel(items, "hostname") == nil {
+		t.Errorf("expected hostname (Section config) at top level")
+	}
+	if findItemByLabel(items, "ip rarp-server") != nil {
+		t.Errorf("ip rarp-server (Section config-if) must NOT appear at top level")
+	}
+}
+
+// TestCompletionEmptySectionKeywordsAppearEverywhere pins the universal-
+// Section rule at the completion layer: a keyword with Section "" (e.g. do)
+// must appear in every section the cursor can resolve to.
+func TestCompletionEmptySectionKeywordsAppearEverywhere(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		line uint
+		col  uint
+	}{
+		{"top_level", "!\n", 1, 0},
+		{"inside_interface", "!\ninterface GigabitEthernet0/0\n c\n!\n", 2, 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := cisco_ios_jinja2.New()
+			defer f.Close()
+
+			doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, []byte(tc.src))
+			if _, err := f.DidOpen(context.Background(), doc); err != nil {
+				t.Fatalf("DidOpen: %v", err)
+			}
+			items, err := f.Completion(context.Background(), doc, protocol.Position{Line: tc.line, Character: tc.col})
+			if err != nil {
+				t.Fatalf("Completion: %v", err)
+			}
+			if findItemByLabel(items, "do") == nil {
+				t.Errorf("expected universal keyword do (Section %q) in %q; labels: %v", "", tc.name, labelsOf(items))
+			}
+		})
+	}
+}
+
+// TestCompletionDocumentationIsMarkupContent pins the change that widened
+// CompletionItem.Documentation from a plain string to protocol.MarkupContent,
+// honoring each keyword's Description.Format and Description.Value.
+func TestCompletionDocumentationIsMarkupContent(t *testing.T) {
+	f := cisco_ios_jinja2.New()
+	defer f.Close()
+
+	doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, []byte("!\n"))
+	if _, err := f.DidOpen(context.Background(), doc); err != nil {
+		t.Fatalf("DidOpen: %v", err)
+	}
+	items, err := f.Completion(context.Background(), doc, protocol.Position{Line: 1, Character: 0})
+	if err != nil {
+		t.Fatalf("Completion: %v", err)
+	}
+	item := findItemByLabel(items, "hostname")
+	if item == nil {
+		t.Fatalf("hostname completion item not found")
+	}
+	if item.Documentation == nil {
+		t.Fatalf("hostname Documentation is nil; expected MarkupContent")
+	}
+	mc, ok := item.Documentation.(protocol.MarkupContent)
+	if !ok {
+		t.Fatalf("hostname Documentation is %T; expected protocol.MarkupContent", item.Documentation)
+	}
+	if mc.Kind != protocol.PlainText {
+		t.Errorf("hostname MarkupContent.Kind = %q, want %q", mc.Kind, protocol.PlainText)
+	}
+	want := "To specify or modify the hostname for the network server, use the hostname command in global configuration mode."
+	if mc.Value != want {
+		t.Errorf("hostname MarkupContent.Value = %q, want %q", mc.Value, want)
+	}
+}
+
+// TestCompletionDocumentationOmittedForEmptyDescription pins that
+// Documentation is left nil when a keyword's Description.Value is empty
+// (e.g. the file privilege keyword), so the editor does not render an
+// empty documentation pane.
+func TestCompletionDocumentationOmittedForEmptyDescription(t *testing.T) {
+	f := cisco_ios_jinja2.New()
+	defer f.Close()
+
+	doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, []byte("!\n"))
+	if _, err := f.DidOpen(context.Background(), doc); err != nil {
+		t.Fatalf("DidOpen: %v", err)
+	}
+	items, err := f.Completion(context.Background(), doc, protocol.Position{Line: 1, Character: 0})
+	if err != nil {
+		t.Fatalf("Completion: %v", err)
+	}
+	item := findItemByLabel(items, "file privilege level")
+	if item == nil {
+		t.Fatalf("file privilege level completion item not found")
+	}
+	if item.Documentation != nil {
+		t.Errorf("file privilege level Documentation = %v; want nil (Description.Value is empty)", item.Documentation)
+	}
+}
+
+func labelsOf(items []protocol.CompletionItem) []string {
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		out = append(out, item.Label)
+	}
+	return out
+}
