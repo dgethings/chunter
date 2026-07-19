@@ -33,13 +33,30 @@ func (f *CiscoIOSFeature) Completion(ctx context.Context, doc *document.Document
 		return nil, nil
 	}
 
+	// sectionForNode maps a tree-sitter *_section node kind to the
+	// corresponding keyword.Section string used in the keywords data.
+	// The innermost section in the ancestor chain wins (break on first
+	// match walking up).
+	//
+	// Gaps: the keyword data carries ~600 distinct Section values
+	// (config-pmap-c, config-archive, config-vpdn, …) for which the
+	// grammar does not yet emit a *_section node. Those keywords remain
+	// unreachable from completion until the grammar is extended.
+	sectionForNode := map[string]string{
+		"interface_section":      "config-if",
+		"router_section":         "config-router",
+		"route_map_section":      "config-route-map",
+		"class_map_section":      "config-cmap",
+		"policy_map_section":     "config-pmap",
+		"vlan_section":           "config-vlan",
+		"line_section":           "config-line",
+		"ip_access_list_section": "config-ext-nacl",
+	}
 	section := "config"
 	for n := node; n != nil; n = n.Parent() {
-		switch n.Kind() {
-		case "interface_section":
-			section = "config-if"
-		case "router_section":
-			section = "config-router"
+		if s, ok := sectionForNode[n.Kind()]; ok {
+			section = s
+			break
 		}
 	}
 
