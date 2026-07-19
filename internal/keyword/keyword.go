@@ -28,7 +28,7 @@ func (k Keywords) Lookup(name string) (Keyword, bool) {
 func (k Keywords) InSection(section string) []Keyword {
 	result := []Keyword{}
 	for _, kw := range k {
-		if kw.Section == section {
+		if kw.Section == "" || kw.Section == section {
 			result = append(result, kw)
 		}
 	}
