@@ -128,3 +128,70 @@ func TestCompletionHostnameSnippetHasEmptyTabstop(t *testing.T) {
 		t.Errorf("hostname insertText = %q, want %q", got, want)
 	}
 }
+
+// TestCompletionNoDuplicateLabels pins the fix for the duplicate-suggestions
+// bug. The keyword database both (a) carries multiple snippets per keyword —
+// the positive form and the `no <kw>` form — and (b) contains ~900 exact
+// duplicate keyword records. The completion output must contain at most one
+// item per distinct label regardless of how the underlying data repeats.
+func TestCompletionNoDuplicateLabels(t *testing.T) {
+	f := cisco_ios_jinja2.New()
+	defer f.Close()
+
+	doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, []byte("!\n"))
+	if _, err := f.DidOpen(context.Background(), doc); err != nil {
+		t.Fatalf("DidOpen: %v", err)
+	}
+	items, err := f.Completion(context.Background(), doc, protocol.Position{Line: 1, Character: 0})
+	if err != nil {
+		t.Fatalf("Completion: %v", err)
+	}
+	if len(items) == 0 {
+		t.Fatalf("expected at least one completion item")
+	}
+	seen := map[string]bool{}
+	for _, item := range items {
+		if seen[item.Label] {
+			t.Errorf("duplicate completion label %q", item.Label)
+			continue
+		}
+		seen[item.Label] = true
+		if item.FilterText == nil {
+			t.Errorf("item %q: missing filterText", item.Label)
+			continue
+		}
+		if *item.FilterText != item.Label {
+			t.Errorf("item %q: filterText %q != label %q",
+				item.Label, *item.FilterText, item.Label)
+		}
+	}
+}
+
+// TestCompletionNoFormHasDistinctLabel verifies the `no <kw>` snippet gets its
+// own distinguishable label instead of collapsing onto the positive form. The
+// activation-character keyword ships both `activation-character ${1:ascii-number}`
+// and `no activation-character`; before the fix both surfaced as a single
+// indistinguishable `activation-character` entry (twice).
+func TestCompletionNoFormHasDistinctLabel(t *testing.T) {
+	f := cisco_ios_jinja2.New()
+	defer f.Close()
+
+	doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, []byte("!\n"))
+	if _, err := f.DidOpen(context.Background(), doc); err != nil {
+		t.Fatalf("DidOpen: %v", err)
+	}
+	items, err := f.Completion(context.Background(), doc, protocol.Position{Line: 1, Character: 0})
+	if err != nil {
+		t.Fatalf("Completion: %v", err)
+	}
+	labels := map[string]bool{}
+	for _, item := range items {
+		labels[item.Label] = true
+	}
+	if !labels["activation-character"] {
+		t.Errorf("expected label %q (positive form)", "activation-character")
+	}
+	if !labels["no activation-character"] {
+		t.Errorf("expected label %q (negation form)", "no activation-character")
+	}
+}
