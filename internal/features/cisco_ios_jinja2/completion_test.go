@@ -169,9 +169,10 @@ func TestCompletionNoDuplicateLabels(t *testing.T) {
 
 // TestCompletionNoFormHasDistinctLabel verifies the `no <kw>` snippet gets its
 // own distinguishable label instead of collapsing onto the positive form. The
-// activation-character keyword ships both `activation-character ${1:ascii-number}`
-// and `no activation-character`; before the fix both surfaced as a single
-// indistinguishable `activation-character` entry (twice).
+// downward-compatible-config keyword ships both
+// `downward-compatible-config ${1:version}` and `no downward-compatible-config`;
+// before the fix both surfaced as a single indistinguishable
+// `downward-compatible-config` entry (twice).
 func TestCompletionNoFormHasDistinctLabel(t *testing.T) {
 	f := cisco_ios_jinja2.New()
 	defer f.Close()
@@ -188,10 +189,10 @@ func TestCompletionNoFormHasDistinctLabel(t *testing.T) {
 	for _, item := range items {
 		labels[item.Label] = true
 	}
-	if !labels["activation-character"] {
-		t.Errorf("expected label %q (positive form)", "activation-character")
+	if !labels["downward-compatible-config"] {
+		t.Errorf("expected label %q (positive form)", "downward-compatible-config")
 	}
-	if !labels["no activation-character"] {
-		t.Errorf("expected label %q (negation form)", "no activation-character")
+	if !labels["no downward-compatible-config"] {
+		t.Errorf("expected label %q (negation form)", "no downward-compatible-config")
 	}
 }
