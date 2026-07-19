@@ -96,9 +96,16 @@ func createItems(kws keyword.Keywords) []protocol.CompletionItem {
 			seen[label] = true
 			snippet := stripPlaceholderDefaults(s)
 			filterText := label
+			var doc any
+			if kw.Description.Value != "" {
+				doc = protocol.MarkupContent{
+					Kind:  kw.Description.Format,
+					Value: kw.Description.Value,
+				}
+			}
 			items = append(items, protocol.CompletionItem{
 				Label:            label,
-				Documentation:    kw.Description.Value,
+				Documentation:    doc,
 				FilterText:       &filterText,
 				InsertText:       &snippet,
 				InsertTextFormat: &format,

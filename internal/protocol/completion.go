@@ -9,7 +9,7 @@ type CompletionItem struct {
 	Kind                *CompletionItemKind `json:"kind,omitempty"`
 	Tags                []CompletionItemTag `json:"tags,omitempty"`
 	Detail              string              `json:"detail,omitempty"`
-	Documentation       string              `json:"documentation,omitempty"`
+	Documentation       any                 `json:"documentation,omitempty"`
 	Deprecated          *bool               `json:"deprecated,omitempty"`
 	Preselect           *bool               `json:"preselect,omitempty"`
 	SortText            *string             `json:"sortText,omitempty"`
