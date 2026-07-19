@@ -58,16 +58,16 @@ clean:
 	$(MAKE) -C $(TS_DIR) clean
 
 release:
+ifeq ($(NEXT),$(VERSION))
+	$(error No new conventional commits since $(VERSION) (svu next=$(NEXT)). Add a feat:/fix: commit, or tag manually to force a release.)
+endif
 	@if git tag -l "$(NEXT)" | grep -q "$(NEXT)"; then \
-		echo "Tag $(NEXT) already exists, running goreleaser only"; \
-	elif [ "$(NEXT)" = "$(VERSION)" ]; then \
-		echo "No new conventional commits since $(VERSION). Commit feat:/fix: changes first."; \
+		echo "Tag $(NEXT) already exists; aborting to avoid re-publishing." >&2; \
 		exit 1; \
-	else \
-		echo "Releasing $(NEXT) (current: $(VERSION))"; \
-		git tag -a "$(NEXT)" -m "Release $(NEXT)"; \
-		git push origin "$(NEXT)"; \
 	fi
+	@echo "Releasing $(NEXT) (current: $(VERSION))"
+	@git tag -a "$(NEXT)" -m "Release $(NEXT)"
+	@git push origin "$(NEXT)"
 	goreleaser release --clean
 	gh release upload $(NEXT) dist/config.yaml dist/metadata.json dist/artifacts.json
 
