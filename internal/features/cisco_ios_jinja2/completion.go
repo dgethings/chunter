@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"regexp"
+	"strings"
 
 	"github.com/dgethings/chunter/internal/ast"
 	"github.com/dgethings/chunter/internal/document"
@@ -68,12 +69,18 @@ func createItems(kws keyword.Keywords) []protocol.CompletionItem {
 	items := []protocol.CompletionItem{}
 	format := protocol.InsertTextFormatSnippet
 	kind := protocol.CompletionItemKindKeyword
+	seen := map[string]bool{}
 	for _, kw := range kws {
 		for _, s := range kw.Snippets {
+			label := snippetLabel(s)
+			if seen[label] {
+				continue
+			}
+			seen[label] = true
 			snippet := stripPlaceholderDefaults(s)
-			filterText := kw.Keyword
+			filterText := label
 			items = append(items, protocol.CompletionItem{
-				Label:            kw.Keyword,
+				Label:            label,
 				Documentation:    kw.Description.Value,
 				FilterText:       &filterText,
 				InsertText:       &snippet,
@@ -83,4 +90,17 @@ func createItems(kws keyword.Keywords) []protocol.CompletionItem {
 		}
 	}
 	return items
+}
+
+// snippetLabel derives a completion item's label from one snippet by taking
+// the literal command text that precedes the first ${N:...} placeholder and
+// trimming trailing whitespace. Snippets that share a keyword but differ in
+// command form — e.g. `activation-character ${1:n}` and `no activation-character`
+// — thus yield distinct labels (`activation-character` and
+// `no activation-character`) instead of collapsing onto the same one.
+func snippetLabel(snippet string) string {
+	if i := strings.Index(snippet, "${"); i >= 0 {
+		return strings.TrimRight(snippet[:i], " \t")
+	}
+	return snippet
 }
