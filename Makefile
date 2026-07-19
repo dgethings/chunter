@@ -16,6 +16,19 @@ SRCS := $(wildcard main.go cmd/*.go) $(shell find internal -name '*.go')
 
 VERSION := $(shell svu current 2>/dev/null || echo "0.0.0")
 NEXT    := $(shell svu next)
+# RELEASE_TAG is the version we build and publish. For a normal release it
+# equals NEXT. When NEXT == VERSION and the VERSION tag already exists, a
+# previous `make release` pushed the tag but died before goreleaser ran; in
+# that case we resume by releasing VERSION. When NEXT == VERSION and the
+# tag does not exist, RELEASE_TAG stays empty and the release target errors
+# out below.
+ifeq ($(NEXT),$(VERSION))
+  RESUMING    := $(if $(shell git tag -l "$(VERSION)"),1,)
+  RELEASE_TAG := $(if $(RESUMING),$(VERSION),)
+else
+  RESUMING    :=
+  RELEASE_TAG := $(NEXT)
+endif
 ROOT_DIR := $(shell pwd)
 CC_WRAPPER := $(ROOT_DIR)/scripts/cc
 # Fall back to the `gh` CLI's keyring token when GITHUB_TOKEN isn't in the
@@ -58,18 +71,22 @@ clean:
 	$(MAKE) -C $(TS_DIR) clean
 
 release:
-ifeq ($(NEXT),$(VERSION))
+ifeq ($(RELEASE_TAG),)
 	$(error No new conventional commits since $(VERSION) (svu next=$(NEXT)). Add a feat:/fix: commit, or tag manually to force a release.)
 endif
-	@if git tag -l "$(NEXT)" | grep -q "$(NEXT)"; then \
-		echo "Tag $(NEXT) already exists; aborting to avoid re-publishing." >&2; \
-		exit 1; \
+	@echo "Releasing $(RELEASE_TAG) (current: $(VERSION), next: $(NEXT), resuming: $(if $(RESUMING),yes,no))"
+	@if [ -z "$(RESUMING)" ]; then \
+		if git tag -l "$(RELEASE_TAG)" | grep -q "$(RELEASE_TAG)"; then \
+			echo "Tag $(RELEASE_TAG) already exists; aborting to avoid re-publishing." >&2; \
+			exit 1; \
+		fi; \
+		git tag -a "$(RELEASE_TAG)" -m "Release $(RELEASE_TAG)"; \
+		git push origin "$(RELEASE_TAG)"; \
+	else \
+		echo "  (resume: tag $(RELEASE_TAG) already pushed, skipping tag step)"; \
 	fi
-	@echo "Releasing $(NEXT) (current: $(VERSION))"
-	@git tag -a "$(NEXT)" -m "Release $(NEXT)"
-	@git push origin "$(NEXT)"
 	goreleaser release --clean
-	gh release upload $(NEXT) dist/config.yaml dist/metadata.json dist/artifacts.json
+	gh release upload $(RELEASE_TAG) dist/config.yaml dist/metadata.json dist/artifacts.json
 
 snapshot:
 	goreleaser release --snapshot --clean
