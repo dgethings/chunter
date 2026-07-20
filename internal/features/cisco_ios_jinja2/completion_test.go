@@ -22,10 +22,51 @@ func TestCompletionWhileTypingValue(t *testing.T) {
 		line uint
 		col  uint
 	}{
+		// Original hostname cases — covered by the AST-based early-return
+		// (cursor lands on a `value` or MISSING-value node).
 		{"hostname_space_col9", "!\nhostname ", 1, 9},
 		{"hostname_space_col10", "!\nhostname ", 1, 10},
 		{"hostname_name_on_value", "!\nhostname name", 1, 9},
 		{"hostname_name_on_value", "!\nhostname name", 1, 12},
+
+		// Section headers whose value field the grammar now models as
+		// optional. Cursor sits in the empty value slot right after the
+		// keyword — the AST resolves to the parent header (or to config),
+		// so the line-based safety net must catch these.
+		{"router_bgp_space", "!\nrouter bgp ", 1, 11},
+		{"router_bgp_no_trailing_bang", "!\nrouter bgp \n", 1, 11},
+		{"interface_space", "!\ninterface ", 1, 10},
+		{"vlan_space", "!\nvlan ", 1, 5},
+		{"route_map_space", "!\nroute-map ", 1, 10},
+		{"class_map_space", "!\nclass-map ", 1, 10},
+		{"policy_map_space", "!\npolicy-map ", 1, 11},
+		{"line_space", "!\nline ", 1, 5},
+
+		// Boundary case — cursor sits exactly at the value token's end,
+		// so ast.FindNodeAtPosition returns the value's parent (the header).
+		// The line-based safety net must catch this.
+		{"router_bgp_value_end", "!\nrouter bgp 100", 1, 14},
+		{"interface_name_end", "!\ninterface Gi0/0", 1, 15},
+		{"hostname_value_end", "!\nhostname r1", 1, 11},
+
+		// Generic command_line case: `ip access-list standard NAME` parses
+		// as command_line (not as ip_access_list_section) until the name is
+		// present. The line-based safety net must catch the placeholder.
+		{"ip_access_list_standard_space", "!\nip access-list standard ", 1, 24},
+		{"ip_access_list_extended_space", "!\nip access-list extended ", 1, 24},
+		{"ip_access_list_standard_name_end", "!\nip access-list standard FOO", 1, 27},
+
+		// Negated headers: `no <header> <value>` — suppress when past the
+		// header keyword.
+		{"no_router_bgp_space", "!\nno router bgp ", 1, 14},
+		{"no_router_bgp_value_end", "!\nno router bgp 100", 1, 17},
+		{"no_interface_space", "!\nno interface ", 1, 13},
+		{"no_hostname_space", "!\nno hostname ", 1, 12},
+		{"no_hostname_value_end", "!\nno hostname oldname", 1, 19},
+
+		// version_statement — same shape as hostname_statement.
+		{"version_space", "!\nversion ", 1, 8},
+		{"version_value_end", "!\nversion 26.2.0", 1, 14},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -42,6 +83,66 @@ func TestCompletionWhileTypingValue(t *testing.T) {
 			t.Logf("%q @ {%d,%d} -> %d items", tc.src, tc.line, tc.col, len(items))
 			if len(items) != 0 {
 				t.Errorf("expected no keyword suggestions while typing a value, got %d", len(items))
+			}
+		})
+	}
+}
+
+// TestCompletionStillActiveForKeywordTyping pins the carve-outs that
+// inArgumentPosition must NOT suppress: when the user is still typing the
+// keyword itself (positive form or `no <kw>` form), keyword completion must
+// remain available.
+func TestCompletionStillActiveForKeywordTyping(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		line uint
+		col  uint
+	}{
+		// Empty line at top level — full config keyword list expected.
+		{"top_level_empty", "!\n", 1, 0},
+		// Partial keyword being typed.
+		{"router_partial", "!\nroute", 1, 6},
+		{"router_bgp_partial", "!\nrouter bg", 1, 9},
+		// Cursor at the end of a complete keyword with no trailing space.
+		// The user has typed the keyword but not yet moved into the value
+		// slot, so accepting the snippet is still useful — the editor
+		// expands it to the keyword + placeholder and jumps the cursor.
+		{"router_bgp_complete", "!\nrouter bgp", 1, 10},
+		{"interface_complete", "!\ninterface", 1, 9},
+		{"vlan_complete", "!\nvlan", 1, 4},
+		{"route_map_complete", "!\nroute-map", 1, 9},
+		{"class_map_complete", "!\nclass-map", 1, 9},
+		{"policy_map_complete", "!\npolicy-map", 1, 10},
+		{"line_complete", "!\nline", 1, 4},
+		// `no ` with cursor in the second-token slot — the user is typing
+		// the keyword after `no`, so the `no <kw>` snippet list must stay
+		// available.
+		{"no_alone_space", "!\nno ", 1, 3},
+		{"no_partial_keyword", "!\nno route", 1, 9},
+		// `no router ` is the one odd case: the cursor is past `router` but
+		// the user is still typing the routing-protocol keyword (`bgp` /
+		// `ospf`). The keyword DB does not currently carry `no router bgp`
+		// and `no router ospf` as filterable-from-`router` snippets, so this
+		// is mainly a regression guard that the carve-out doesn't suppress
+		// mid-keyword input.
+		{"no_router_space", "!\nno router ", 1, 10},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := cisco_ios_jinja2.New()
+			defer f.Close()
+			doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, []byte(tc.src))
+			if _, err := f.DidOpen(context.Background(), doc); err != nil {
+				t.Fatalf("DidOpen: %v", err)
+			}
+			items, err := f.Completion(context.Background(), doc, protocol.Position{Line: tc.line, Character: tc.col})
+			if err != nil {
+				t.Fatalf("Completion: %v", err)
+			}
+			t.Logf("%q @ {%d,%d} -> %d items", tc.src, tc.line, tc.col, len(items))
+			if len(items) == 0 {
+				t.Errorf("expected keyword suggestions while typing a keyword, got 0")
 			}
 		})
 	}

@@ -304,6 +304,37 @@ func TestExtract_NilRoot(t *testing.T) {
 	}
 }
 
+// TestExtract_SkipsIncompleteHeaders pins the grammar's optional-name-field
+// behavior: when the user has typed a section header keyword but not yet
+// entered its name value (e.g. `interface ` or `router bgp `), the parser
+// produces a `*_header` node with no name child. The symbol extractor must
+// skip such headers rather than indexing them with an empty name — otherwise
+// every typing-in-progress header would show up as a phantom symbol named "".
+func TestExtract_SkipsIncompleteHeaders(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+	}{
+		{"interface_no_name", "!\ninterface \n!\n"},
+		{"vlan_no_name", "!\nvlan \n!\n"},
+		{"route_map_no_name", "!\nroute-map \n!\n"},
+		{"class_map_no_name", "!\nclass-map \n!\n"},
+		{"policy_map_no_name", "!\npolicy-map \n!\n"},
+		{"router_bgp_no_process_id", "!\nrouter bgp \n!\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root, content := parseRoot(t, tc.src)
+			syms := symbols.Extract("file:///test", root, content)
+			for _, s := range syms {
+				if s.Name == "" {
+					t.Errorf("extracted symbol with empty name: kind=%s range=%+v", s.Kind, s.Range)
+				}
+			}
+		})
+	}
+}
+
 func TestExtract_IgnoresNonDefinitionLines(t *testing.T) {
 	// Body commands (match, set, class, permit, deny, neighbor, etc.) must
 	// NOT be indexed as symbols. Only headers / definitions count.
