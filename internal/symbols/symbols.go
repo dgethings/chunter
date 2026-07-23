@@ -306,6 +306,9 @@ func extractSection(uri string, n *sitter.Node, content []byte) (Symbol, bool) {
 		}
 		if sp.synthesize != nil {
 			name, nameRange := sp.synthesize(header, content)
+			if name == "" {
+				return Symbol{}, false
+			}
 			sym.Name = name
 			sym.NameRange = nameRange
 			return sym, true
@@ -314,7 +317,11 @@ func extractSection(uri string, n *sitter.Node, content []byte) (Symbol, bool) {
 		if nameNode == nil {
 			return Symbol{}, false
 		}
-		sym.Name = textOf(nameNode, content)
+		name := textOf(nameNode, content)
+		if name == "" {
+			return Symbol{}, false
+		}
+		sym.Name = name
 		sym.NameRange = nodeRange(nameNode)
 		return sym, true
 	}

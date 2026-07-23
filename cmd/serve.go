@@ -21,7 +21,8 @@ var serveCmd = &cobra.Command{
 		}
 
 		opts := &jrpc2.ServerOptions{
-			AllowPush: true,
+			AllowPush:   true,
+			Concurrency: 1,
 		}
 
 		ioChannel := channel.Header("")(os.Stdin, os.Stdout)

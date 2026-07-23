@@ -12,6 +12,83 @@ import (
 	"github.com/dgethings/chunter/internal/protocol"
 )
 
+// sectionSpec describes one section type known to both the grammar and the
+// keyword database. It is the single source of truth from which the AST-kind
+// → keyword-Section map and the argument-position regex are derived.
+type sectionSpec struct {
+	astKind    string // tree-sitter node kind, e.g. "interface_section"
+	keywordSec string // keyword.Section value, e.g. "config-if"
+	headerPat  string // regex fragment matching the header keyword prefix, e.g. "interface"
+}
+
+// sectionSpecs lists every section the grammar emits. Add new sections here
+// and only here — both sectionForNodeMap and argumentPositionRe are built from
+// this table.
+var sectionSpecs = []sectionSpec{
+	{"interface_section", "config-if", "interface"},
+	{"router_section", "config-router", `router\s+(?:bgp|ospf)`},
+	{"route_map_section", "config-route-map", "route-map"},
+	{"class_map_section", "config-cmap", "class-map"},
+	{"policy_map_section", "config-pmap", "policy-map"},
+	{"vlan_section", "config-vlan", "vlan"},
+	{"line_section", "config-line", `line(?:\s+(?:console|aux|vty))?`},
+	{"ip_access_list_section", "config-ext-nacl", `ip\s+access-list\s+(?:standard|extended)`},
+}
+
+// valueCommandPats are non-section commands that take a single value argument
+// (so completion should be suppressed past the keyword). These have no
+// corresponding section node in the grammar.
+var valueCommandPats = []string{
+	"hostname",
+	"version",
+}
+
+// sectionForNodeMap maps tree-sitter *_section node kinds to keyword.Section
+// strings. Built once from sectionSpecs at package init.
+var sectionForNodeMap = func() map[string]string {
+	m := make(map[string]string, len(sectionSpecs))
+	for _, s := range sectionSpecs {
+		m[s.astKind] = s.keywordSec
+	}
+	return m
+}()
+
+// argumentPositionRe matches a line whose cursor sits past the keyword prefix
+// of a section header or value-taking command. Used by inArgumentPosition to
+// suppress keyword completion while the user is typing a value into a
+// placeholder. Built once from sectionSpecs and valueCommandPats at package
+// init.
+//
+// The pattern is structured as:
+//
+//	^\s*                  -- optional leading indentation
+//	(no\s+)?              -- optional `no ` negation prefix
+//	(<keyword>)           -- a known section header / value-taking command
+//	\s                    -- at least one whitespace separator after the keyword
+//
+// The trailing `\s` is what discriminates "still typing the keyword" (e.g.
+// `router bg`) from "past the keyword, in argument territory" (e.g.
+// `router bgp ` or `router bgp 100`). MatchString only requires the regex to
+// match a prefix of the input, so once the keyword + a single whitespace
+// character appears anywhere in the line-up-to-cursor the match succeeds
+// regardless of what follows.
+//
+// The `no <kw>` group is optional, so the same pattern covers both the
+// positive form (`hostname <value>`) and the negated form
+// (`no hostname <value>`). The carve-out for "user is still typing the
+// keyword after `no`" (e.g. `no route`) falls out naturally: the regex
+// requires the full keyword to appear before the trailing `\s`, so a partial
+// keyword like `route` does not match `router\s+(?:bgp|ospf)`.
+var argumentPositionRe = func() *regexp.Regexp {
+	parts := make([]string, 0, len(sectionSpecs)+len(valueCommandPats))
+	for _, s := range sectionSpecs {
+		parts = append(parts, s.headerPat)
+	}
+	parts = append(parts, valueCommandPats...)
+	pattern := `^\s*(?:no\s+)?(?:` + strings.Join(parts, "|") + `)\s`
+	return regexp.MustCompile(pattern)
+}()
+
 func (f *CiscoIOSFeature) Completion(ctx context.Context, doc *document.Document, pos protocol.Position) ([]protocol.CompletionItem, error) {
 	tree := f.trees[doc.URI]
 	l := slog.With("uri", doc.URI, "language", doc.LanguageID, "message", "completion")
@@ -57,28 +134,18 @@ func (f *CiscoIOSFeature) Completion(ctx context.Context, doc *document.Document
 		return nil, nil
 	}
 
-	// sectionForNode maps a tree-sitter *_section node kind to the
-	// corresponding keyword.Section string used in the keywords data.
-	// The innermost section in the ancestor chain wins (break on first
-	// match walking up).
+	// Resolve the innermost enclosing *_section node to its keyword.Section
+	// value; the first match walking up the ancestor chain wins. The mapping
+	// lives in the package-level sectionForNodeMap, derived from sectionSpecs,
+	// so the AST-kind → Section table is defined exactly once.
 	//
 	// Gaps: the keyword data carries ~600 distinct Section values
 	// (config-pmap-c, config-archive, config-vpdn, …) for which the
 	// grammar does not yet emit a *_section node. Those keywords remain
 	// unreachable from completion until the grammar is extended.
-	sectionForNode := map[string]string{
-		"interface_section":      "config-if",
-		"router_section":         "config-router",
-		"route_map_section":      "config-route-map",
-		"class_map_section":      "config-cmap",
-		"policy_map_section":     "config-pmap",
-		"vlan_section":           "config-vlan",
-		"line_section":           "config-line",
-		"ip_access_list_section": "config-ext-nacl",
-	}
 	section := "config"
 	for n := node; n != nil; n = n.Parent() {
-		if s, ok := sectionForNode[n.Kind()]; ok {
+		if s, ok := sectionForNodeMap[n.Kind()]; ok {
 			section = s
 			break
 		}
@@ -152,46 +219,6 @@ func snippetLabel(snippet string) string {
 	}
 	return snippet
 }
-
-// argumentPositionRe matches a line whose cursor sits past the keyword prefix
-// of a section header or value-taking command. Used by inArgumentPosition to
-// suppress keyword completion while the user is typing a value into a
-// placeholder.
-//
-// The pattern is structured as:
-//
-//	^\s*                  -- optional leading indentation
-//	(no\s+)?              -- optional `no ` negation prefix
-//	(<keyword>)           -- a known section header / value-taking command
-//	\s                    -- at least one whitespace separator after the keyword
-//
-// The trailing `\s` is what discriminates "still typing the keyword" (e.g.
-// `router bg`) from "past the keyword, in argument territory" (e.g.
-// `router bgp ` or `router bgp 100`). MatchString only requires the regex to
-// match a prefix of the input, so once the keyword + a single whitespace
-// character appears anywhere in the line-up-to-cursor the match succeeds
-// regardless of what follows.
-//
-// The `no <kw>` group is optional, so the same pattern covers both the
-// positive form (`hostname <value>`) and the negated form
-// (`no hostname <value>`). The carve-out for "user is still typing the
-// keyword after `no`" (e.g. `no route`) falls out naturally: the regex
-// requires the full keyword to appear before the trailing `\s`, so a partial
-// keyword like `route` does not match `router\s+(bgp|ospf)`.
-var argumentPositionRe = regexp.MustCompile(
-	`^\s*(?:no\s+)?(?:` +
-		`router\s+(?:bgp|ospf)` +
-		`|interface` +
-		`|vlan` +
-		`|route-map` +
-		`|class-map` +
-		`|policy-map` +
-		`|line(?:\s+(?:console|aux|vty))?` +
-		`|ip\s+access-list\s+(?:standard|extended)` +
-		`|hostname` +
-		`|version` +
-		`)\s`,
-)
 
 // inArgumentPosition reports whether the cursor at pos sits past the keyword
 // prefix of doc.Line(pos.Line) — i.e., the user is typing a value into a

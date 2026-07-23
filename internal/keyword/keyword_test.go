@@ -6,12 +6,36 @@ import (
 	"github.com/dgethings/chunter/internal/keyword"
 )
 
-func TestInSection_ExactMatch(t *testing.T) {
-	kws := keyword.Keywords{
+func TestSetLookup(t *testing.T) {
+	kws := []keyword.Keyword{
 		{Keyword: "clock", Section: "config-if"},
 		{Keyword: "hostname", Section: "config"},
 	}
-	got := kws.InSection("config-if")
+	s := keyword.NewSet(kws)
+
+	kw, ok := s.Lookup("clock")
+	if !ok {
+		t.Fatal("expected to find clock")
+	}
+	if kw.Keyword != "clock" {
+		t.Errorf("expected clock, got %q", kw.Keyword)
+	}
+	if kw.Section != "config-if" {
+		t.Errorf("expected section config-if, got %q", kw.Section)
+	}
+
+	if _, ok := s.Lookup("nope"); ok {
+		t.Error("expected Lookup to return false for a missing keyword")
+	}
+}
+
+func TestSetInSection_ExactMatch(t *testing.T) {
+	kws := []keyword.Keyword{
+		{Keyword: "clock", Section: "config-if"},
+		{Keyword: "hostname", Section: "config"},
+	}
+	s := keyword.NewSet(kws)
+	got := s.InSection("config-if")
 	if len(got) != 1 {
 		t.Fatalf("expected 1 keyword for config-if, got %d", len(got))
 	}
@@ -20,12 +44,13 @@ func TestInSection_ExactMatch(t *testing.T) {
 	}
 }
 
-func TestInSection_EmptySectionIsUniversal(t *testing.T) {
-	kws := keyword.Keywords{
+func TestSetInSection_EmptySectionIsUniversal(t *testing.T) {
+	kws := []keyword.Keyword{
 		{Keyword: "do", Section: ""},
 	}
+	s := keyword.NewSet(kws)
 	for _, section := range []string{"config", "config-if", "anything"} {
-		got := kws.InSection(section)
+		got := s.InSection(section)
 		if len(got) != 1 {
 			t.Errorf("InSection(%q): expected universal keyword, got %d results", section, len(got))
 			continue
@@ -36,13 +61,14 @@ func TestInSection_EmptySectionIsUniversal(t *testing.T) {
 	}
 }
 
-func TestInSection_ProductionDataHasUniversalKeywords(t *testing.T) {
-	kws := keyword.Keywords{
+func TestSetInSection_ProductionDataHasUniversalKeywords(t *testing.T) {
+	kws := []keyword.Keyword{
 		{Keyword: "hostname", Section: "config"},
 		{Keyword: "do", Section: ""},
 		{Keyword: "clock", Section: "config-if"},
 	}
-	got := kws.InSection("config")
+	s := keyword.NewSet(kws)
+	got := s.InSection("config")
 	labels := map[string]bool{}
 	for _, kw := range got {
 		labels[kw.Keyword] = true
@@ -55,5 +81,23 @@ func TestInSection_ProductionDataHasUniversalKeywords(t *testing.T) {
 	}
 	if labels["clock"] {
 		t.Errorf("config-if keyword clock must not appear in config section")
+	}
+}
+
+func TestSetLookupOverwrite(t *testing.T) {
+	// When two entries share the same Keyword field, the last one wins in the
+	// by-name index built by NewSet.
+	kws := []keyword.Keyword{
+		{Keyword: "dup", Section: "config"},
+		{Keyword: "dup", Section: "config-if"},
+	}
+	s := keyword.NewSet(kws)
+
+	kw, ok := s.Lookup("dup")
+	if !ok {
+		t.Fatal("expected to find dup")
+	}
+	if kw.Section != "config-if" {
+		t.Errorf("expected last entry to win (config-if), got %q", kw.Section)
 	}
 }

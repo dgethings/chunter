@@ -3,6 +3,7 @@ package cisco_ios_jinja2_test
 import (
 	"context"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/dgethings/chunter/internal/document"
@@ -471,4 +472,148 @@ func labelsOf(items []protocol.CompletionItem) []string {
 		out = append(out, item.Label)
 	}
 	return out
+}
+
+// TestArgumentPositionRegexDerived verifies that the argumentPositionRe built
+// from sectionSpecs + valueCommandPats behaves identically to the previously
+// hardcoded regex. The production regex is unexported in package
+// cisco_ios_jinja2, so this external test reconstructs both the derived
+// pattern (mirroring the table) and the old hardcoded pattern, then
+// cross-checks them across a broad input set and pins the derived pattern's
+// source string so any change to the table surfaces here for review. The
+// behavioral correctness of the real production regex is additionally covered
+// by TestCompletionWhileTypingValue / TestCompletionStillActiveForKeywordTyping
+// through the public Completion API.
+func TestArgumentPositionRegexDerived(t *testing.T) {
+	// Mirrors sectionSpecs / valueCommandPats in completion.go. If those
+	// change, update this copy together with wantPattern below.
+	type spec struct {
+		astKind, keywordSec, headerPat string
+	}
+	specs := []spec{
+		{"interface_section", "config-if", "interface"},
+		{"router_section", "config-router", `router\s+(?:bgp|ospf)`},
+		{"route_map_section", "config-route-map", "route-map"},
+		{"class_map_section", "config-cmap", "class-map"},
+		{"policy_map_section", "config-pmap", "policy-map"},
+		{"vlan_section", "config-vlan", "vlan"},
+		{"line_section", "config-line", `line(?:\s+(?:console|aux|vty))?`},
+		{"ip_access_list_section", "config-ext-nacl", `ip\s+access-list\s+(?:standard|extended)`},
+	}
+	valueCmds := []string{"hostname", "version"}
+
+	// Reconstruct the derived pattern exactly as completion.go does.
+	parts := make([]string, 0, len(specs)+len(valueCmds))
+	for _, s := range specs {
+		parts = append(parts, s.headerPat)
+	}
+	parts = append(parts, valueCmds...)
+	derivedPattern := `^\s*(?:no\s+)?(?:` + strings.Join(parts, "|") + `)\s`
+
+	// Golden: the exact source string the derivation must produce. Only the
+	// alternation ORDER differs from the pre-refactor regex; no alternative is
+	// a prefix of another, so matching behavior is identical.
+	const wantPattern = `^\s*(?:no\s+)?(?:` +
+		`interface` +
+		`|router\s+(?:bgp|ospf)` +
+		`|route-map` +
+		`|class-map` +
+		`|policy-map` +
+		`|vlan` +
+		`|line(?:\s+(?:console|aux|vty))?` +
+		`|ip\s+access-list\s+(?:standard|extended)` +
+		`|hostname` +
+		`|version` +
+		`)\s`
+	if derivedPattern != wantPattern {
+		t.Errorf("derived pattern changed:\n got: %q\nwant: %q", derivedPattern, wantPattern)
+	}
+
+	// The pre-refactor hardcoded pattern, kept as the behavioral reference.
+	oldRe := regexp.MustCompile(`^\s*(?:no\s+)?(?:` +
+		`router\s+(?:bgp|ospf)` +
+		`|interface` +
+		`|vlan` +
+		`|route-map` +
+		`|class-map` +
+		`|policy-map` +
+		`|line(?:\s+(?:console|aux|vty))?` +
+		`|ip\s+access-list\s+(?:standard|extended)` +
+		`|hostname` +
+		`|version` +
+		`)\s`)
+	newRe := regexp.MustCompile(derivedPattern)
+
+	cases := []struct {
+		line string
+		want bool
+	}{
+		// Past the keyword, in argument territory -> match.
+		{`router bgp `, true},
+		{`router bgp 100`, true},
+		{`router ospf 1`, true},
+		{`interface Gi0/0`, true},
+		{`interface `, true},
+		{`vlan 10`, true},
+		{`vlan `, true},
+		{`route-map RM 10`, true},
+		{`class-map CM`, true},
+		{`policy-map PM`, true},
+		{`line console 0`, true},
+		{`line vty 0 4`, true},
+		{`line aux 0`, true},
+		{`line `, true},
+		{`ip access-list standard FOO`, true},
+		{`ip access-list extended BAR`, true},
+		{`hostname r1`, true},
+		{`hostname `, true},
+		{`version 26.2.0`, true},
+		{`version `, true},
+
+		// Negated headers past the keyword -> match.
+		{`no router bgp 100`, true},
+		{`no interface Gi0/0`, true},
+		{`no hostname oldname`, true},
+		{`no vlan 10`, true},
+
+		// Indented variants -> match.
+		{`  interface Gi0/0`, true},
+		{"\tno hostname x", true},
+
+		// Still typing the keyword (no trailing whitespace) -> no match.
+		{`route`, false},
+		{`router bg`, false},
+		{`router bgp`, false},
+		{`interface`, false},
+		{`vlan`, false},
+		{`hostname`, false},
+		{`version`, false},
+		{`line`, false},
+		{`ip access-list`, false},
+		{`ip access-list standard`, false},
+
+		// `no ` still typing the keyword -> no match.
+		{`no `, false},
+		{`no route`, false},
+		{`no router`, false},
+		{`no router bgp`, false},
+		{`no hostname`, false},
+
+		// Unrelated / empty lines -> no match.
+		{``, false},
+		{`!`, false},
+		{`snmp-server community`, false},
+		{`description hello`, false},
+	}
+
+	for _, tc := range cases {
+		gotNew := newRe.MatchString(tc.line)
+		gotOld := oldRe.MatchString(tc.line)
+		if gotNew != gotOld {
+			t.Errorf("regexes disagree on %q: derived=%v old=%v", tc.line, gotNew, gotOld)
+		}
+		if gotNew != tc.want {
+			t.Errorf("derived regex on %q: got %v want %v", tc.line, gotNew, tc.want)
+		}
+	}
 }

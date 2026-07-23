@@ -14,26 +14,27 @@ import (
 	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
+// CiscoIOSFeature implements the LSP feature set for Cisco IOS + Jinja2 configs.
+// All methods are called from a single goroutine (the LSP server runs with
+// jrpc2 Concurrency=1), so the mutable fields below (trees, parser) need no
+// synchronization. See cmd/serve.go.
 type CiscoIOSFeature struct {
 	parser  *sitter.Parser
 	trees   map[string]*sitter.Tree
-	lang    *sitter.Language
-	keyword keyword.Keywords
+	keyword *keyword.Set
 	symbols *symbols.Table
 }
 
 func New() *CiscoIOSFeature {
-	lang := sitter.NewLanguage(ts.Language())
 	p := sitter.NewParser()
-	p.SetLanguage(lang)
+	p.SetLanguage(sitter.NewLanguage(ts.Language()))
 	if info, err := os.Stat("../tree-sitter-cisco-ios-jinja2/src/parser.c"); err == nil {
 		slog.Info("parser version", "cisco_ios", fmt.Sprintf("%v", info.ModTime()))
 	}
 	return &CiscoIOSFeature{
 		parser:  p,
 		trees:   make(map[string]*sitter.Tree),
-		lang:    lang,
-		keyword: Keywords,
+		keyword: keyword.NewSet(Keywords),
 		symbols: symbols.NewTable(),
 	}
 }

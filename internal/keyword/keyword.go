@@ -16,21 +16,38 @@ type Description struct {
 
 type Keywords []Keyword
 
-func (k Keywords) Lookup(name string) (Keyword, bool) {
-	for _, kw := range k {
-		if kw.Keyword == name {
-			return kw, true
-		}
-	}
-	return Keyword{}, false
+// Set provides O(1) keyword lookups by name and by section. Build it once at
+// startup via NewSet from the full keyword slice.
+type Set struct {
+	byName    map[string]Keyword
+	bySection map[string][]Keyword
+	all       []Keyword
 }
 
-func (k Keywords) InSection(section string) []Keyword {
-	result := []Keyword{}
-	for _, kw := range k {
-		if kw.Section == "" || kw.Section == section {
-			result = append(result, kw)
-		}
+// NewSet builds a Set from a keyword slice, indexing by name and section in a
+// single pass. Keywords whose Section is "" are global and are returned by
+// every InSection query. When two entries share the same Keyword field, the
+// last one wins in the by-name index.
+func NewSet(kws []Keyword) *Set {
+	s := &Set{
+		byName:    make(map[string]Keyword, len(kws)),
+		bySection: make(map[string][]Keyword),
+		all:       kws,
 	}
+	for _, kw := range kws {
+		s.byName[kw.Keyword] = kw
+		s.bySection[kw.Section] = append(s.bySection[kw.Section], kw)
+	}
+	return s
+}
+
+func (s *Set) Lookup(name string) (Keyword, bool) {
+	kw, ok := s.byName[name]
+	return kw, ok
+}
+
+func (s *Set) InSection(section string) []Keyword {
+	result := append([]Keyword{}, s.bySection[""]...)
+	result = append(result, s.bySection[section]...)
 	return result
 }

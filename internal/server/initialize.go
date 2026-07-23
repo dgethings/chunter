@@ -15,9 +15,12 @@ type InitializeParams struct {
 
 func (s *Server) Initialize(ctx context.Context, params InitializeParams) (protocol.InitializeResult, error) {
 	s.setState(stateInitialized)
-	slog.Info("connected to: %s %s", params.ClientInfo.Name, params.ClientInfo.Version)
+	if params.ClientInfo != nil {
+		slog.Info("connected to client", "name", params.ClientInfo.Name, "version", params.ClientInfo.Version)
+	}
 	return protocol.InitializeResult{
 		Capabilities: protocol.ServerCapabilities{
+			PositionEncoding:       "utf-8",
 			TextDocumentSync:       1,
 			HoverProvider:          true,
 			DefinitionProvider:     true,
