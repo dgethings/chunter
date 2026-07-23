@@ -21,16 +21,18 @@ Powered by a dedicated [tree-sitter-cisco-ios-jinja2](https://github.com/dgethin
 
 ### Diagnostics
 
-Three families of diagnostics, all anchored precisely on the offending token:
+Four families of diagnostics, all anchored precisely on the offending token:
 
-1. **Version mismatch** (Error) — when the `! version X` comment emitted by `show run` disagrees with the configured `version Y` statement.
-2. **Undefined reference** (Warning) — when a command names a target that has no definition in the same file.
-3. **Duplicate definition** (Warning) — when the same `(kind, name)` is defined twice; the diagnostic carries `relatedInformation` back to the first definition.
+1. **Syntax / parse** (Error / Warning) — tree-sitter `ERROR` nodes (tokens that could not be incorporated into any rule, e.g. an unterminated `{% if %}`) are reported as errors quoting the offending snippet; `MISSING` tokens are reported naming what is missing. A section missing its terminating `!` is downgraded to a Warning anchored on the section header.
+2. **Version mismatch** (Error) — when the `! version X` comment emitted by `show run` disagrees with the configured `version Y` statement.
+3. **Undefined reference** (Warning) — when a command names a target that has no definition in the same file.
+4. **Duplicate definition** (Warning) — when the same `(kind, name)` is defined twice; the diagnostic carries `relatedInformation` back to the first definition.
 
 Example:
 
 ```bash
 $ chunter check site-a.ios.j2
+site-a.ios.j2:1:1:  [chunter] section "interface GigabitEthernet0/0" is missing its terminating "!"
 site-a.ios.j2:5:18:  [chunter] undefined acl "ACL-OUT"
 site-a.ios.j2:6:22:  [chunter] undefined route-map "RM-OUT"
 site-a.ios.j2:9:19:  [chunter] undefined acl "ACL-VOICE"
@@ -239,8 +241,10 @@ chunter/
 │   │       ├── references.go
 │   │       ├── document_symbol.go
 │   │       ├── diagnostics.go          # dispatcher
+│   │       ├── diagnostics_syntax.go   # tree-sitter ERROR / MISSING tokens
 │   │       ├── diagnostics_version.go  # version mismatch rule
 │   │       ├── diagnostics_refs.go     # undefined refs + duplicates
+│   │       ├── diagnostics_section.go  # wrong-section hint
 │   │       └── keywords.go             # ~6k IOS command DB
 │   ├── keyword/                  # Keyword type + Lookup / InSection
 │   ├── protocol/                 # hand-rolled LSP JSON-RPC DTOs
