@@ -21,6 +21,7 @@ type Keywords []Keyword
 type Set struct {
 	byName    map[string]Keyword
 	bySection map[string][]Keyword
+	tree      *SectionTree
 	all       []Keyword
 }
 
@@ -38,6 +39,16 @@ func NewSet(kws []Keyword) *Set {
 		s.byName[kw.Keyword] = kw
 		s.bySection[kw.Section] = append(s.bySection[kw.Section], kw)
 	}
+
+	// Build the section hierarchy tree from all known sections.
+	var sections []string
+	for sec := range s.bySection {
+		if sec != "" {
+			sections = append(sections, sec)
+		}
+	}
+	s.tree = BuildSectionTree(sections)
+
 	return s
 }
 
@@ -49,5 +60,22 @@ func (s *Set) Lookup(name string) (Keyword, bool) {
 func (s *Set) InSection(section string) []Keyword {
 	result := append([]Keyword{}, s.bySection[""]...)
 	result = append(result, s.bySection[section]...)
+	return result
+}
+
+// SectionTree returns the section hierarchy tree built from the keyword data.
+func (s *Set) SectionTree() *SectionTree {
+	return s.tree
+}
+
+// SectionsWithKeywords returns the set of section IDs that have at least one
+// keyword (excluding the global "" section).
+func (s *Set) SectionsWithKeywords() map[string]bool {
+	result := make(map[string]bool, len(s.bySection))
+	for sec, kws := range s.bySection {
+		if sec != "" && len(kws) > 0 {
+			result[sec] = true
+		}
+	}
 	return result
 }

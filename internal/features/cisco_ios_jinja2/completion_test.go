@@ -373,6 +373,29 @@ func TestCompletionSectionAware_TopLevelExcludesInterfaceKeywords(t *testing.T) 
 	}
 }
 
+// TestCompletionIPAccessListSection verifies the normal (non-fallback) path
+// for the ip_access_list_section, which the grammar maps to config-ext-nacl.
+// Because config-ext-nacl carries keywords in the real data, completion must
+// return them directly without falling back to an ancestor section.
+func TestCompletionIPAccessListSection(t *testing.T) {
+	f := cisco_ios_jinja2.New()
+	defer f.Close()
+
+	src := "!\nip access-list extended TEST\n permit ip any any\n!\n"
+	doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, []byte(src))
+	if _, err := f.DidOpen(context.Background(), doc); err != nil {
+		t.Fatalf("DidOpen: %v", err)
+	}
+	// Cursor on an empty line inside the ACL section
+	items, err := f.Completion(context.Background(), doc, protocol.Position{Line: 2, Character: 0})
+	if err != nil {
+		t.Fatalf("Completion: %v", err)
+	}
+	if len(items) == 0 {
+		t.Fatal("expected completion items inside ip access-list section, got none")
+	}
+}
+
 // TestCompletionEmptySectionKeywordsAppearEverywhere pins the universal-
 // Section rule at the completion layer: a keyword with Section "" (e.g. do)
 // must appear in every section the cursor can resolve to.

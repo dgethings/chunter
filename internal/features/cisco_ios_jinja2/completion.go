@@ -135,20 +135,24 @@ func (f *CiscoIOSFeature) Completion(ctx context.Context, doc *document.Document
 	}
 
 	// Resolve the innermost enclosing *_section node to its keyword.Section
-	// value; the first match walking up the ancestor chain wins. The mapping
-	// lives in the package-level sectionForNodeMap, derived from sectionSpecs,
-	// so the AST-kind → Section table is defined exactly once.
-	//
-	// Gaps: the keyword data carries ~600 distinct Section values
-	// (config-pmap-c, config-archive, config-vpdn, …) for which the
-	// grammar does not yet emit a *_section node. Those keywords remain
-	// unreachable from completion until the grammar is extended.
-	section := "config"
+	// value. If the detected section has no keywords in the data, fall back
+	// to the nearest ancestor section that does (via SectionTree.NearestKnown).
+	rawSection := "config"
 	for n := node; n != nil; n = n.Parent() {
 		if s, ok := sectionForNodeMap[n.Kind()]; ok {
-			section = s
+			rawSection = s
 			break
 		}
+	}
+
+	// If the grammar detected a section that has no keywords in the data
+	// (e.g. config-ext-nacl when only config-std-nacl keywords exist, or a
+	// section the grammar models but the scraper didn't capture), fall back
+	// to the nearest ancestor section that has keywords.
+	section := rawSection
+	if len(f.keyword.InSection(rawSection)) == 0 {
+		known := f.keyword.SectionsWithKeywords()
+		section = f.keyword.SectionTree().NearestKnown(rawSection, known)
 	}
 
 	items := createItems(f.keyword.InSection(section))

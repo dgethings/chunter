@@ -177,6 +177,25 @@ func TestNearestKnown(t *testing.T) {
 	}
 }
 
+func TestNearestKnown_WithRealKeywordSections(t *testing.T) {
+	// Simulate the completion fallback scenario: a section detected by the
+	// grammar that has no keywords, falling back to the nearest ancestor.
+	sections := []string{"config", "config-if", "config-router", "config-router-af", "config-pmap", "config-pmap-c"}
+	tree := keyword.BuildSectionTree(sections)
+
+	// config-router-af has keywords — no fallback needed
+	known := map[string]bool{"config-router-af": true, "config-router": true, "config": true, "config-if": true}
+	if got := tree.NearestKnown("config-router-af", known); got != "config-router-af" {
+		t.Errorf("NearestKnown(config-router-af) = %q, want config-router-af", got)
+	}
+
+	// config-pmap-c has NO keywords — should fall back to config-pmap
+	known2 := map[string]bool{"config-pmap": true, "config": true}
+	if got := tree.NearestKnown("config-pmap-c", known2); got != "config-pmap" {
+		t.Errorf("NearestKnown(config-pmap-c) = %q, want config-pmap", got)
+	}
+}
+
 func TestBuildSectionTree_RealDataFixture(t *testing.T) {
 	sections := []string{
 		"config",
