@@ -10,6 +10,7 @@ import (
 	"github.com/dgethings/chunter/internal/document"
 	"github.com/dgethings/chunter/internal/keyword"
 	"github.com/dgethings/chunter/internal/protocol"
+	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
 // sectionSpec describes one section type known to both the grammar and the
@@ -53,7 +54,30 @@ var sectionForNodeMap = func() map[string]string {
 	return m
 }()
 
-// argumentPositionRe matches a line whose cursor sits past the keyword prefix
+// resolveACLSection reads the ip_access_list_header's "type" field to
+// determine whether this is a standard or extended ACL section.
+func resolveACLSection(sectionNode *sitter.Node, content []byte) string {
+	// Find the ip_access_list_header child
+	for i := uint(0); i < sectionNode.NamedChildCount(); i++ {
+		child := sectionNode.NamedChild(i)
+		if child == nil || child.Kind() != "ip_access_list_header" {
+			continue
+		}
+		typeNode := child.ChildByFieldName("type")
+		if typeNode == nil {
+			break
+		}
+		switch string(content[typeNode.StartByte():typeNode.EndByte()]) {
+		case "standard":
+			return "config-std-nacl"
+		case "extended":
+			return "config-ext-nacl"
+		}
+	}
+	return "config-ext-nacl"
+}
+
+
 // of a section header or value-taking command. Used by inArgumentPosition to
 // suppress keyword completion while the user is typing a value into a
 // placeholder. Built once from sectionSpecs and valueCommandPats at package
@@ -139,6 +163,10 @@ func (f *CiscoIOSFeature) Completion(ctx context.Context, doc *document.Document
 	// to the nearest ancestor section that does (via SectionTree.NearestKnown).
 	rawSection := "config"
 	for n := node; n != nil; n = n.Parent() {
+		if n.Kind() == "ip_access_list_section" {
+			rawSection = resolveACLSection(n, doc.Content)
+			break
+		}
 		if s, ok := sectionForNodeMap[n.Kind()]; ok {
 			rawSection = s
 			break
