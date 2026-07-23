@@ -101,3 +101,52 @@ func TestSetLookupOverwrite(t *testing.T) {
 		t.Errorf("expected last entry to win (config-if), got %q", kw.Section)
 	}
 }
+
+func TestIsValidInSection(t *testing.T) {
+	kws := []keyword.Keyword{
+		{Keyword: "foo", Section: "config-if"},
+		{Keyword: "bar", Section: ""}, // global
+	}
+	s := keyword.NewSet(kws)
+
+	cases := []struct {
+		name    string
+		section string
+		want    bool
+	}{
+		{"foo", "config-if", true},      // exact section match
+		{"foo", "config-router", false}, // known but wrong section
+		{"bar", "anything", true},       // global valid everywhere
+		{"baz", "config", false},        // unknown keyword
+	}
+	for _, tc := range cases {
+		got := s.IsValidInSection(tc.name, tc.section)
+		if got != tc.want {
+			t.Errorf("IsValidInSection(%q, %q) = %v, want %v", tc.name, tc.section, got, tc.want)
+		}
+	}
+}
+
+func TestLookupSection(t *testing.T) {
+	kws := []keyword.Keyword{
+		{Keyword: "foo", Section: "config-if"},
+		{Keyword: "bar", Section: ""}, // global only
+		{Keyword: "baz", Section: "config-router"},
+	}
+	s := keyword.NewSet(kws)
+
+	if got := s.LookupSection("foo"); got != "config-if" {
+		t.Errorf("LookupSection(foo) = %q, want config-if", got)
+	}
+	if got := s.LookupSection("baz"); got != "config-router" {
+		t.Errorf("LookupSection(baz) = %q, want config-router", got)
+	}
+	// bar is global only -> no non-empty section to report.
+	if got := s.LookupSection("bar"); got != "" {
+		t.Errorf("LookupSection(bar) = %q, want \"\"", got)
+	}
+	// Unknown keyword.
+	if got := s.LookupSection("missing"); got != "" {
+		t.Errorf("LookupSection(missing) = %q, want \"\"", got)
+	}
+}
