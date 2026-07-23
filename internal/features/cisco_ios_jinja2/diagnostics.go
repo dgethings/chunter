@@ -17,7 +17,7 @@ import (
 //  3. duplicate defs    (SeverityWarning) — diagnostics_refs.go
 //  4. wrong section     (SeverityHint)    — diagnostics_section.go
 func (f *CiscoIOSFeature) runDiagnostics(doc *document.Document, tree *sitter.Tree) []protocol.Diagnostic {
-	var diags []protocol.Diagnostic
+	diags := make([]protocol.Diagnostic, 0)
 	diags = append(diags, f.runVersionMismatchDiagnostics(doc, tree)...)
 	diags = append(diags, f.runUndefinedReferenceDiagnostics(doc)...)
 	diags = append(diags, f.runDuplicateDefinitionDiagnostics(doc)...)
