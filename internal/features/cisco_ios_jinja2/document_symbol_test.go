@@ -30,13 +30,15 @@ ip access-list standard NAMED-ACL
 !
 access-list 100 permit ip any any
 !
+hostname r1
+!
 `
 	f, doc := defTestFeature(t, src)
 	syms, err := f.DocumentSymbol(context.Background(), doc)
 	if err != nil {
 		t.Fatalf("DocumentSymbol: %v", err)
 	}
-	// Expect 10 symbols (one per definition line, minus the `!` preamble).
+	// Expect 11 symbols (one per definition line, minus the `!` preamble).
 	wantKinds := map[symbols.Kind]int{
 		symbols.KindInterface:  1,
 		symbols.KindRouter:     1,
@@ -47,6 +49,7 @@ access-list 100 permit ip any any
 		symbols.KindLine:       1,
 		symbols.KindRedundancy: 1,
 		symbols.KindACL:        2, // NAMED-ACL + access-list 100
+		symbols.KindHostname:   1,
 	}
 	got := make(map[symbols.Kind]int)
 	for _, s := range syms {
@@ -99,6 +102,7 @@ func TestDocumentSymbol_LSPKindMapping(t *testing.T) {
 		{symbols.KindLine, protocol.SymbolKindVariable},
 		{symbols.KindRedundancy, protocol.SymbolKindNamespace},
 		{symbols.KindACL, protocol.SymbolKindNamespace},
+		{symbols.KindHostname, protocol.SymbolKindVariable},
 	}
 	src := `interface Gi0/0
 !
@@ -117,6 +121,8 @@ line vty 0 4
 redundancy
 !
 ip access-list standard ACL1
+!
+hostname r1
 !
 `
 	f, doc := defTestFeature(t, src)

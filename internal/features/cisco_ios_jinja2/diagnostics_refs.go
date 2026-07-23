@@ -92,7 +92,7 @@ func (f *CiscoIOSFeature) runDuplicateDefinitionDiagnostics(doc *document.Docume
 				Message:  fmt.Sprintf("duplicate %s definition %q", s.Kind, s.Name),
 				RelatedInformation: []protocol.DiagnosticRelatedInformation{{
 					Location: protocol.Location{URI: prior.sym.URI, Range: prior.sym.NameRange},
-					Message:  fmt.Sprintf("first defined here"),
+					Message:  "first defined here",
 				}},
 			})
 		}

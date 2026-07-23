@@ -216,6 +216,16 @@ interface Gi0/0
 			wantCode:    "duplicate-interface",
 			wantMessage: `duplicate interface definition "Gi0/0"`,
 		},
+		{
+			name: "duplicate hostname",
+			src: `hostname r1
+!
+hostname r1
+!
+`,
+			wantCode:    "duplicate-hostname",
+			wantMessage: `duplicate hostname definition "r1"`,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

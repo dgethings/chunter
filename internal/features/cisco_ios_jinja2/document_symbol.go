@@ -23,6 +23,7 @@ var lspSymbolKind = map[symbols.Kind]int{
 	symbols.KindLine:       protocol.SymbolKindVariable,  // 13 — synthesized "vty-0-4"
 	symbols.KindRedundancy: protocol.SymbolKindNamespace, // 3
 	symbols.KindACL:        protocol.SymbolKindNamespace, // 3
+	symbols.KindHostname:   protocol.SymbolKindVariable,  // 13 — string identifier
 }
 
 // DocumentSymbol implements textDocument/documentSymbol. Returns one entry

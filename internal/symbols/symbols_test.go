@@ -235,6 +235,7 @@ redundancy
 		symbols.KindVlan:       1,
 		symbols.KindLine:       1,
 		symbols.KindRedundancy: 1,
+		symbols.KindHostname:   1,
 	}
 	got := make(map[symbols.Kind]int)
 	for _, s := range syms {

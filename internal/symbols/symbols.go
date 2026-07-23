@@ -27,6 +27,7 @@ const (
 	KindLine           Kind = "line"
 	KindRedundancy     Kind = "redundancy"
 	KindACL            Kind = "acl"
+	KindHostname       Kind = "hostname"
 )
 
 // Symbol is a named definition site extracted from a parsed document.
@@ -238,12 +239,26 @@ func Extract(uri string, root *sitter.Node, content []byte) []Symbol {
 		return true
 	})
 	walkNamed(root, func(n *sitter.Node) bool {
-		if sym, ok := extractACL(uri, n, content); ok {
+		if sym, ok := extractFlat(uri, n, content); ok {
 			out = append(out, sym)
 		}
 		return true
 	})
 	return out
+}
+
+// extractFlat dispatches a flat *_statement node (one that is not a
+// hierarchical section) to the appropriate symbol extractor. Currently
+// handles access_list_statement (numbered ACL form) and
+// hostname_statement. Add new flat statement kinds here.
+func extractFlat(uri string, n *sitter.Node, content []byte) (Symbol, bool) {
+	switch n.Kind() {
+	case "access_list_statement":
+		return extractACL(uri, n, content)
+	case "hostname_statement":
+		return extractHostname(uri, n, content)
+	}
+	return Symbol{}, false
 }
 
 // sectionSpec describes how to extract a Symbol from a *_section node.
@@ -391,6 +406,32 @@ func extractACL(uri string, n *sitter.Node, content []byte) (Symbol, bool) {
 		URI:       uri,
 		Range:     nodeRange(n),
 		NameRange: nodeRange(nameArg),
+	}, true
+}
+
+// extractHostname extracts a Symbol from a `hostname_statement` node
+// (`hostname <value>`). IOS permits at most one hostname per config; a
+// second occurrence is almost always a copy-paste error, so it is flagged
+// by runDuplicateDefinitionDiagnostics. The hostname_value field carries
+// the name token.
+func extractHostname(uri string, n *sitter.Node, content []byte) (Symbol, bool) {
+	if n.Kind() != "hostname_statement" {
+		return Symbol{}, false
+	}
+	nameNode := n.ChildByFieldName("hostname_value")
+	if nameNode == nil {
+		return Symbol{}, false
+	}
+	name := textOf(nameNode, content)
+	if name == "" {
+		return Symbol{}, false
+	}
+	return Symbol{
+		Kind:      KindHostname,
+		Name:      name,
+		URI:       uri,
+		Range:     nodeRange(n),
+		NameRange: nodeRange(nameNode),
 	}, true
 }
 
