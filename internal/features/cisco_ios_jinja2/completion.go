@@ -28,9 +28,11 @@ type sectionSpec struct {
 var sectionSpecs = []sectionSpec{
 	{"interface_section", "config-if", "interface"},
 	{"router_section", "config-router", `router\s+(?:bgp|ospf)`},
+	{"address_family_section", "config-router-af", "address-family"},
 	{"route_map_section", "config-route-map", "route-map"},
 	{"class_map_section", "config-cmap", "class-map"},
 	{"policy_map_section", "config-pmap", "policy-map"},
+	{"policy_map_class_section", "config-pmap-c", "class"},
 	{"vlan_section", "config-vlan", "vlan"},
 	{"line_section", "config-line", `line(?:\s+(?:console|aux|vty))?`},
 	{"ip_access_list_section", "config-ext-nacl", `ip\s+access-list\s+(?:standard|extended)`},

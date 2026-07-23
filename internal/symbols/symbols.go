@@ -16,15 +16,17 @@ import (
 type Kind string
 
 const (
-	KindInterface  Kind = "interface"
-	KindRouter     Kind = "router"
-	KindRouteMap   Kind = "route-map"
-	KindClassMap   Kind = "class-map"
-	KindPolicyMap  Kind = "policy-map"
-	KindVlan       Kind = "vlan"
-	KindLine       Kind = "line"
-	KindRedundancy Kind = "redundancy"
-	KindACL        Kind = "acl"
+	KindInterface      Kind = "interface"
+	KindRouter         Kind = "router"
+	KindAddressFamily  Kind = "address-family"
+	KindRouteMap       Kind = "route-map"
+	KindClassMap       Kind = "class-map"
+	KindPolicyMap      Kind = "policy-map"
+	KindPolicyMapClass Kind = "policy-map-class"
+	KindVlan           Kind = "vlan"
+	KindLine           Kind = "line"
+	KindRedundancy     Kind = "redundancy"
+	KindACL            Kind = "acl"
 )
 
 // Symbol is a named definition site extracted from a parsed document.
@@ -259,9 +261,11 @@ type sectionSpec struct {
 var sectionSpecs = []sectionSpec{
 	{sectionKind: "interface_section", kind: KindInterface, headerKind: "interface_header", nameField: "name"},
 	{sectionKind: "router_section", kind: KindRouter, headerKind: "router_header", nameField: "process_id"},
+	{sectionKind: "address_family_section", kind: KindAddressFamily, headerKind: "address_family_header", nameField: "name"},
 	{sectionKind: "route_map_section", kind: KindRouteMap, headerKind: "route_map_header", nameField: "name"},
 	{sectionKind: "class_map_section", kind: KindClassMap, headerKind: "class_map_header", nameField: "name"},
 	{sectionKind: "policy_map_section", kind: KindPolicyMap, headerKind: "policy_map_header", nameField: "name"},
+	{sectionKind: "policy_map_class_section", kind: KindPolicyMapClass, headerKind: "policy_map_class_header", nameField: "name"},
 	{sectionKind: "vlan_section", kind: KindVlan, headerKind: "vlan_header", nameField: "name"},
 	{
 		sectionKind: "line_section",
