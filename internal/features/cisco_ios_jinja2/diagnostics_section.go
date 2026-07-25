@@ -4,15 +4,19 @@ import (
 	"strings"
 
 	"github.com/dgethings/chunter/internal/document"
+	"github.com/dgethings/chunter/internal/keyword"
 	"github.com/dgethings/chunter/internal/protocol"
 	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
-// runWrongSectionDiagnostics emits a Hint for each command whose keyword is
-// known to the database but not valid in the enclosing config section. This
-// catches common copy-paste errors (e.g. an interface command inside a
-// router section). Unknown keywords are silently skipped — only commands that
-// ARE documented but in the WRONG section are flagged.
+// runWrongSectionDiagnostics emits a Hint for each command whose leading
+// keyword is known to the database but not valid in the enclosing config
+// section. This catches common copy-paste errors (e.g. an interface command
+// inside a router section). Unknown keywords are silently skipped - only
+// commands that ARE documented but in the WRONG section are flagged.
+// For command_line nodes the leading keyword is resolved via longest-prefix
+// match against the keyword DB, so multi-word commands like "ip access-group"
+// are validated correctly.
 func (f *CiscoIOSFeature) runWrongSectionDiagnostics(doc *document.Document, tree *sitter.Tree) []protocol.Diagnostic {
 	if tree == nil {
 		return nil
@@ -27,21 +31,14 @@ func (f *CiscoIOSFeature) runWrongSectionDiagnostics(doc *document.Document, tre
 	walkNamed(root, func(n *sitter.Node) bool {
 		kind := n.Kind()
 
-		// Skip negated_statement itself but keep descending so the inner
-		// command is still validated where it belongs.
 		if kind == "negated_statement" {
 			return true
 		}
 
-		// Only check command_line and *_statement nodes.
 		if kind != "command_line" && !strings.HasSuffix(kind, "_statement") {
 			return true
 		}
 
-		// Resolve the enclosing section by walking up the ancestors. The ACL
-		// special-case is checked before the generic map because
-		// ip_access_list_section is present in sectionForNodeMap (mapped to a
-		// default) but its true section depends on the header's type field.
 		enclosingSection := "config"
 		for p := n.Parent(); p != nil; p = p.Parent() {
 			if p.Kind() == "ip_access_list_section" {
@@ -54,26 +51,20 @@ func (f *CiscoIOSFeature) runWrongSectionDiagnostics(doc *document.Document, tre
 			}
 		}
 
-		// Extract the command keyword from the node's first child. This is the
-		// anonymous keyword token for *_statement rules and the named
-		// identifier for command_line (matching the leadingAndArgs pattern in
-		// the symbols package).
-		keyword := firstKeywordFromNode(n, doc.Content)
-		if keyword == "" {
+		kw := firstKeywordFromNode(n, doc.Content, f.keyword)
+		if kw == "" {
 			return true
 		}
 
-		// Skip unknown keywords (not in the database).
-		if _, ok := f.keyword.Lookup(keyword); !ok {
+		if _, ok := f.keyword.Lookup(kw); !ok {
 			return true
 		}
 
-		// Valid in this section (either an exact match or a global keyword)?
-		if f.keyword.IsValidInSection(keyword, enclosingSection) {
+		if f.keyword.IsValidInSection(kw, enclosingSection) {
 			return true
 		}
 
-		validSection := f.keyword.LookupSection(keyword)
+		validSection := f.keyword.LookupSection(kw)
 		diags = append(diags, protocol.Diagnostic{
 			Range: protocol.LineRange(
 				n.StartPosition().Row,
@@ -82,7 +73,7 @@ func (f *CiscoIOSFeature) runWrongSectionDiagnostics(doc *document.Document, tre
 			),
 			Severity: protocol.SeverityHint,
 			Source:   "chunter",
-			Message:  keyword + " is valid in " + validSection + ", not in " + enclosingSection,
+			Message:  kw + " is valid in " + validSection + ", not in " + enclosingSection,
 		})
 		return true
 	})
@@ -90,10 +81,15 @@ func (f *CiscoIOSFeature) runWrongSectionDiagnostics(doc *document.Document, tre
 	return diags
 }
 
-// firstKeywordFromNode returns the text of the node's first child (the leading
-// keyword token). For *_statement rules this is the anonymous keyword literal;
-// for command_line it is the named identifier.
-func firstKeywordFromNode(n *sitter.Node, content []byte) string {
+// firstKeywordFromNode resolves the leading keyword for a command-like
+// node. For *_statement rules this is the anonymous first child (single-token
+// keyword). For command_line nodes it performs a longest-prefix probe against
+// the keyword DB: tokens [name, arg1, arg2, ...] are joined with spaces and
+// probed longest-first (up to maxPrefixTokens). This lets multi-word keywords
+// like "ip access-group" resolve correctly. Entries containing "(" are
+// excluded from probing (documentation aliases, not matchable command text).
+// Falls back to the bare name token if no multi-word prefix matches.
+func firstKeywordFromNode(n *sitter.Node, content []byte, kw *keyword.Set) string {
 	if n == nil || n.ChildCount() == 0 {
 		return ""
 	}
@@ -101,7 +97,31 @@ func firstKeywordFromNode(n *sitter.Node, content []byte) string {
 	if first == nil {
 		return ""
 	}
-	return string(content[first.StartByte():first.EndByte()])
+	name := string(content[first.StartByte():first.EndByte()])
+
+	if n.Kind() != "command_line" || kw == nil {
+		return name
+	}
+
+	const maxPrefixTokens = 4
+	var tokens []string
+	tokens = append(tokens, name)
+	for i := uint(1); i < n.ChildCount() && len(tokens) < maxPrefixTokens; i++ {
+		c := n.Child(i)
+		if c == nil || !c.IsNamed() {
+			continue
+		}
+		tokens = append(tokens, string(content[c.StartByte():c.EndByte()]))
+	}
+
+	for i := len(tokens); i >= 1; i-- {
+		candidate := strings.Join(tokens[:i], " ")
+		if entry, ok := kw.Lookup(candidate); ok && !strings.Contains(entry.Keyword, "(") {
+			return candidate
+		}
+	}
+
+	return name
 }
 
 // walkNamed depth-first traverses the named-children subtree of n, invoking
