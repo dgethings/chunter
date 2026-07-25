@@ -4,3 +4,8 @@ dist/
 log.log
 example.ios.j2
 .nvim.lua
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
