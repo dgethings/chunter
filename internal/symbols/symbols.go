@@ -249,14 +249,17 @@ func Extract(uri string, root *sitter.Node, content []byte) []Symbol {
 
 // extractFlat dispatches a flat *_statement node (one that is not a
 // hierarchical section) to the appropriate symbol extractor. Currently
-// handles access_list_statement (numbered ACL form) and
-// hostname_statement. Add new flat statement kinds here.
+// handles access_list_statement (numbered ACL form),
+// hostname_statement, and command_line (named-ACL fallback). Add new
+// flat statement kinds here.
 func extractFlat(uri string, n *sitter.Node, content []byte) (Symbol, bool) {
 	switch n.Kind() {
 	case "access_list_statement":
 		return extractACL(uri, n, content)
 	case "hostname_statement":
 		return extractHostname(uri, n, content)
+	case "command_line":
+		return extractNamedACLCommandLine(uri, n, content)
 	}
 	return Symbol{}, false
 }
@@ -409,6 +412,47 @@ func extractACL(uri string, n *sitter.Node, content []byte) (Symbol, bool) {
 	}, true
 }
 
+// extractNamedACLCommandLine recovers an ACL definition from an
+// `ip access-list <standard|extended> NAME` line that the grammar parsed
+// as a flat command_line rather than a hierarchical ip_access_list_section.
+//
+// Normally such a line opens a real sub-mode and parses as
+// ip_access_list_section (handled by extractSection). But when the line is
+// absorbed into an enclosing section's body — which happens whenever a
+// nested section (e.g. policy_map_class_section) has consumed the `!` that
+// the enclosing section still needs to terminate (the grammar's documented
+// `!`-counting heuristic) — the line surfaces as a generic command_line.
+// This fallback keeps ACL symbol resolution working in that case.
+func extractNamedACLCommandLine(uri string, n *sitter.Node, content []byte) (Symbol, bool) {
+	leading, args, argNodes := leadingAndArgs(n, content)
+	if leading != "ip" || len(args) < 3 {
+		return Symbol{}, false
+	}
+	// `ip access-list <standard|extended> NAME`.
+	if args[0] != "access-list" {
+		return Symbol{}, false
+	}
+	if args[1] != "standard" && args[1] != "extended" {
+		return Symbol{}, false
+	}
+	nameIdx := 2
+	if nameIdx >= len(argNodes) {
+		return Symbol{}, false
+	}
+	nameNode := argNodes[nameIdx]
+	name := textOf(nameNode, content)
+	if name == "" {
+		return Symbol{}, false
+	}
+	return Symbol{
+		Kind:      KindACL,
+		Name:      name,
+		URI:       uri,
+		Range:     nodeRange(n),
+		NameRange: nodeRange(nameNode),
+	}, true
+}
+
 // extractHostname extracts a Symbol from a `hostname_statement` node
 // (`hostname <value>`). IOS permits at most one hostname per config; a
 // second occurrence is almost always a copy-paste error, so it is flagged
@@ -536,6 +580,28 @@ var refSpecs = []refSpec{
 	{Leading: []string{"switchport", "access", "vlan"}, ArgIndex: 0, Kind: KindVlan},
 }
 
+// refSectionSpec describes a hierarchical section node whose header names a
+// referenced entity (rather than a standalone definition). The canonical
+// case is the `class NAME { ... }` sub-block inside a policy-map: it opens a
+// config-pmap-c sub-mode AND cites a class-map to apply, so it is both a
+// section and a reference to a class-map definition.
+//
+// The `class NAME` line parses as a flat class_statement when the grammar's
+// `!`-counting heuristic cannot dedicate a terminator to the sub-mode, and
+// as a policy_map_class_section when it can. The flat form is handled by the
+// refSpec `{["class"], 0, KindClassMap}` above; this table covers the
+// section form so the same reference is extracted regardless of which shape
+// the grammar picks.
+type refSectionSpec struct {
+	sectionKind string
+	headerKind  string
+	kind        Kind
+}
+
+var refSectionSpecs = []refSectionSpec{
+	{sectionKind: "policy_map_class_section", headerKind: "policy_map_class_header", kind: KindClassMap},
+}
+
 // ExtractReferences walks root and returns every reference it recognizes, in
 // document order. Returns nil if root is nil.
 //
@@ -550,6 +616,12 @@ func ExtractReferences(uri string, root *sitter.Node, content []byte) []Referenc
 	}
 	var refs []Reference
 	walkNamed(root, func(n *sitter.Node) bool {
+		// Section-shaped reference introducers (e.g. `class NAME` parsed as a
+		// policy_map_class_section). These are not command-like, so handle them
+		// before the command-line path below; keep descending either way.
+		if r, ok := extractSectionReference(uri, n, content); ok {
+			refs = append(refs, r)
+		}
 		if !isCommandLike(n) {
 			return true
 		}
@@ -611,6 +683,38 @@ func isNegated(n *sitter.Node) bool {
 		}
 	}
 	return false
+}
+
+// extractSectionReference extracts a Reference from a section-shaped node
+// listed in refSectionSpecs (e.g. a policy_map_class_section whose header
+// names a class-map). The referenced name token comes from the header's
+// `name` field, and the Reference range covers just that token so diagnostics
+// and Go-To-Definition can anchor on it precisely.
+func extractSectionReference(uri string, n *sitter.Node, content []byte) (Reference, bool) {
+	for _, sp := range refSectionSpecs {
+		if n.Kind() != sp.sectionKind {
+			continue
+		}
+		header := namedChildByKind(n, sp.headerKind)
+		if header == nil {
+			return Reference{}, false
+		}
+		nameNode := header.ChildByFieldName("name")
+		if nameNode == nil {
+			return Reference{}, false
+		}
+		name := textOf(nameNode, content)
+		if name == "" {
+			return Reference{}, false
+		}
+		return Reference{
+			Kind:  sp.kind,
+			Name:  name,
+			URI:   uri,
+			Range: nodeRange(nameNode),
+		}, true
+	}
+	return Reference{}, false
 }
 
 // leadingAndArgs decomposes a command-like node into (leading token text,
