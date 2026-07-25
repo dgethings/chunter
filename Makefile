@@ -60,7 +60,7 @@ lsp:
 test: test-lsp test-ts
 
 test-lsp: $(TS_STAMP)
-	CGO_ENABLED=1 go test ./...
+	CGO_ENABLED=1 go test -race ./...
 
 test-ts: $(TS_STAMP)
 	cd $(TS_DIR) && $(TS) test

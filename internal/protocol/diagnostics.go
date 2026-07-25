@@ -17,3 +17,7 @@ type DidChangeTextDocumentParams struct {
 type TextDocumentContentChangeEvent struct {
 	Text string `json:"text"`
 }
+
+type DidCloseTextDocumentParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+}

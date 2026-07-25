@@ -6,7 +6,6 @@ import (
 
 	"github.com/dgethings/chunter/internal/document"
 	"github.com/dgethings/chunter/internal/features"
-	"github.com/dgethings/chunter/internal/features/cisco_ios_jinja2"
 )
 
 type serverState int
@@ -26,13 +25,16 @@ type Server struct {
 	version string
 }
 
+// New creates a Server with no features registered. Callers register the
+// language-specific features they need via RegisterFeature. Keeping the CGO
+// feature out of this constructor lets the server-package tests run without
+// pulling in the tree-sitter parser.
 func New(version string) *Server {
 	s := &Server{
 		documents: document.NewStore(),
 		features:  features.NewRouter(),
 		version:   version,
 	}
-	s.RegisterFeature(cisco_ios_jinja2.New())
 	return s
 }
 

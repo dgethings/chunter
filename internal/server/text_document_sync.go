@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/creachadair/jrpc2"
 	"github.com/dgethings/chunter/internal/document"
 	"github.com/dgethings/chunter/internal/protocol"
 )
@@ -30,13 +29,7 @@ func (s *Server) DidOpen(ctx context.Context, params protocol.DidOpenTextDocumen
 		l.Error("didOpen error", "error", err.Error())
 	}
 
-	srv := jrpc2.ServerFromContext(ctx)
-	if srv != nil {
-		srv.Notify(ctx, "textDocument/publishDiagnostics", protocol.PublishDiagnosticsParams{
-			URI:         doc.URI,
-			Diagnostics: diagnostics,
-		})
-	}
+	publishDiagnostics(ctx, doc.URI, diagnostics)
 	l.Debug("opened", "uri", doc.URI)
 	return nil
 }
@@ -66,20 +59,14 @@ func (s *Server) DidChange(ctx context.Context, params protocol.DidChangeTextDoc
 			continue
 		}
 
-		srv := jrpc2.ServerFromContext(ctx)
-		if srv != nil {
-			srv.Notify(ctx, "textDocument/publishDiagnostics", protocol.PublishDiagnosticsParams{
-				URI:         doc.URI,
-				Diagnostics: diagnostics,
-			})
-		}
+		publishDiagnostics(ctx, doc.URI, diagnostics)
 	}
 	l.Debug("successfully changed", "uri", doc.URI)
 	return nil
 }
 
-func (s *Server) DidClose(ctx context.Context, params protocol.TextDocumentIdentifier) error {
-	doc, err := s.documents.Get(params.URI)
+func (s *Server) DidClose(ctx context.Context, params protocol.DidCloseTextDocumentParams) error {
+	doc, err := s.documents.Get(params.TextDocument.URI)
 	if err != nil {
 		slog.Error("failed to get document", "error", err.Error())
 		return nil
@@ -94,6 +81,6 @@ func (s *Server) DidClose(ctx context.Context, params protocol.TextDocumentIdent
 	if err := f.DidClose(ctx, doc); err != nil {
 		l.Error("failed execution", "error", err.Error())
 	}
-	s.documents.Delete(params.URI)
+	s.documents.Delete(params.TextDocument.URI)
 	return nil
 }
