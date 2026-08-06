@@ -1,5 +1,15 @@
 version: 2
 
+# Release gate: run the CGO-enabled test suite and enforce the coverage
+# floor before any artifact is built. A non-zero exit from either hook aborts
+# the release (and `make snapshot`). See README -> Development for what each
+# target checks; both work from a clean checkout (the published grammar
+# module), so no sibling checkout is required.
+before:
+  hooks:
+    - make test
+    - make cover
+
 builds:
   - env:
       - CGO_ENABLED=1

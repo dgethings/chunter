@@ -287,6 +287,13 @@ bump the default in the `Makefile` to ratchet it upward. The floor is total-only
 by design — per-package floors are deferred to avoid churn. The `keyword`
 package (~92%) sets the high-water mark.
 
+**Release gate.** Every release (and `make snapshot`) is gated on green tests
+and the coverage floor: `.goreleaser.yml` runs `make test` then `make cover` as
+`before` hooks before any artifact is built, so a failing test or a coverage
+regression aborts the release before publishing. No sibling grammar checkout is
+needed — both targets use the published module, so the gate holds in a clean
+checkout or CI.
+
 See [PLAN.md](PLAN.md) for the multi-phase design that landed the current feature set, and [PLAN-IP-ACCESS-LIST.md](PLAN-IP-ACCESS-LIST.md) for the next planned grammar refinement.
 
 ---
