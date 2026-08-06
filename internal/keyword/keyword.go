@@ -5,8 +5,38 @@ import "github.com/dgethings/chunter/internal/protocol"
 type Keyword struct {
 	Keyword string
 	Description
-	Section  string
-	Snippets []string
+	Section      string
+	Snippets     []string
+	Defaults     string
+	EnterMode    string
+	EnterModeArg int // 0 = none; otherwise the 1-based positional arg index that refines the mode (e.g. router bgp -> 1)
+	MinVersion   string
+	MaxVersion   string
+	History      CommandHistory
+	Usage        UsageGuideline
+	Examples     Examples
+	DeviceTypes  []string
+}
+
+// CommandHistory records the release that introduced (or last modified) a
+// command, scraped from the Cisco "Command History" table.
+type CommandHistory struct {
+	Release      string
+	Modification string
+}
+
+// UsageGuideline holds the prose scraped from the "Usage Guidelines" and any
+// accompanying note for a command.
+type UsageGuideline struct {
+	Preamble string
+	Note     string
+}
+
+// Examples holds the preamble and code block scraped from the "Examples"
+// section of a command page.
+type Examples struct {
+	Preamble string
+	Code     string
 }
 
 type Description struct {
