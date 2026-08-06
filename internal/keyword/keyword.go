@@ -70,14 +70,37 @@ func (s *Set) Lookup(name string) (Keyword, bool) {
 }
 
 // IsValidInSection returns true if the keyword name is known AND valid in the
-// given section (either the keyword is global — Section == "" — or it has an
-// entry whose Section matches). Returns false for unknown keywords.
+// given section. A keyword is valid in `section` when it is global (Section ==
+// ""), has an exact entry for `section`, OR is valid in an ANCESTOR of `section`
+// (a keyword documented for `config-if` is also valid in its sub-modes such as
+// `config-if-atm-range`, which the grammar models as a child section). Returns
+// false for unknown keywords.
+//
+// The ancestry check consults the SectionTree; for a `section` that the tree
+// does not know at all (no keyword in the DB references it), callers should
+// first collapse it to its nearest known ancestor (see SectionTree.NearestKnown)
+// — IsValidInSection alone cannot relate an unknown section to its parents
+// (B4/B5, chunter-mpc).
 func (s *Set) IsValidInSection(name, section string) bool {
 	sections, ok := s.byNameSection[name]
 	if !ok {
 		return false
 	}
-	return sections[""] || sections[section]
+	if sections[""] || sections[section] {
+		return true
+	}
+	for validSec := range sections {
+		// Inherit a keyword into child sub-modes (a config-if keyword is valid in
+		// config-if-atm-range), but NOT from the root: a "config" (global config
+		// mode) keyword such as `hostname` is valid only at the top level, not
+		// inside sub-modes, so both the empty-string and "config" sections are
+		// excluded from the ancestry grant. Without this exclusion, `hostname`
+		// inside `router bgp` would stop being flagged (chunter-mpc).
+		if validSec != "" && validSec != "config" && s.tree.IsAncestor(validSec, section) {
+			return true
+		}
+	}
+	return false
 }
 
 // LookupSection returns the first non-empty Section for the given keyword

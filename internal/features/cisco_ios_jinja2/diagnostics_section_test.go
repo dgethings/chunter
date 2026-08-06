@@ -134,7 +134,7 @@ func TestWrongSectionDiagnostics_MultiSectionKeyword(t *testing.T) {
 	assertNoDiagAbout(t, diags, "mtu")
 }
 
-// TestWrongSectionDiagnostics_OnlyHintsForKeywords confirms the pass does not
+// TestWrongSectionDiagnostics_NoFalsePositives confirms the pass does not
 // accidentally flag the well-known commands used elsewhere in the same config
 // (regression guard against over-eager matching).
 func TestWrongSectionDiagnostics_NoFalsePositives(t *testing.T) {
@@ -144,4 +144,16 @@ func TestWrongSectionDiagnostics_NoFalsePositives(t *testing.T) {
 	diags := openDiags(t, src)
 	assertNoDiagAbout(t, diags, "speed")
 	assertNoDiagAbout(t, diags, "aggregate-address")
+}
+
+// TestWrongSectionDiagnostics_ParentKeywordInChildSection guards B4/B5
+// (chunter-mpc): a keyword documented for a PARENT section must NOT be flagged
+// when used in a CHILD section. `nsf cisco` is valid only in config-router; used
+// inside an address-family (config-router-af, a child of config-router) it must
+// not raise a wrong-section Hint. Before B4, IsValidInSection did an exact
+// match only and would have flagged it.
+func TestWrongSectionDiagnostics_ParentKeywordInChildSection(t *testing.T) {
+	src := "router bgp 100\n address-family ipv4\n  nsf cisco\n!\n"
+	diags := openDiags(t, src)
+	assertNoDiagAbout(t, diags, "nsf")
 }

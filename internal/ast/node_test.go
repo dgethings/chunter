@@ -123,3 +123,20 @@ func TestFindNodeAtPosition(t *testing.T) {
 		})
 	}
 }
+
+// TestFindNodeAtPosition_OutOfRangeNoPanic guards B1 (chunter-mpc): an
+// out-of-range position must not panic. The original code dereferenced the
+// node (GrammarName) before the nil check, so a nil return from
+// DescendantForPointRange would have panicked. (This binding returns a node
+// rather than nil for out-of-range points, so the assertion is that the call
+// completes and yields a usable node — the nil path itself is defensive.)
+func TestFindNodeAtPosition_OutOfRangeNoPanic(t *testing.T) {
+	root := parseRoot(t, "!\nhostname test\n!\n")
+	for _, p := range []struct{ l, c uint }{{9999, 9999}, {500, 0}, {1, 99999}} {
+		// Must not panic; a non-nil node (the root / enclosing node) is fine.
+		got := ast.FindNodeAtPosition(root, p.l, p.c)
+		if got == nil {
+			t.Errorf("FindNodeAtPosition(%d,%d) returned nil for a non-nil root", p.l, p.c)
+		}
+	}
+}

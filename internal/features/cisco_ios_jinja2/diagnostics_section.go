@@ -3,9 +3,11 @@ package cisco_ios_jinja2
 import (
 	"strings"
 
+	"github.com/dgethings/chunter/internal/ast"
 	"github.com/dgethings/chunter/internal/document"
 	"github.com/dgethings/chunter/internal/keyword"
 	"github.com/dgethings/chunter/internal/protocol"
+	"github.com/dgethings/chunter/internal/section"
 	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
@@ -28,7 +30,7 @@ func (f *CiscoIOSFeature) runWrongSectionDiagnostics(doc *document.Document, tre
 
 	var diags []protocol.Diagnostic
 
-	walkNamed(root, func(n *sitter.Node) bool {
+	ast.WalkNamed(root, func(n *sitter.Node) bool {
 		kind := n.Kind()
 
 		if kind == "negated_statement" {
@@ -39,16 +41,16 @@ func (f *CiscoIOSFeature) runWrongSectionDiagnostics(doc *document.Document, tre
 			return true
 		}
 
-		enclosingSection := "config"
-		for p := n.Parent(); p != nil; p = p.Parent() {
-			if p.Kind() == "ip_access_list_section" {
-				enclosingSection = resolveACLSection(p, doc.Content)
-				break
-			}
-			if s, ok := sectionForNodeMap[p.Kind()]; ok {
-				enclosingSection = s
-				break
-			}
+		enclosingSection, _ := section.EnclosingSection(n, doc.Content)
+		// B5 (chunter-mpc): when the grammar detects a section the keyword DB has
+		// no keywords for (or a sub-mode more precise than the DB models),
+		// collapse it to the nearest known ancestor before validating — mirroring
+		// completion.go. Without this, a keyword documented for a parent section
+		// is wrongly flagged in the child (and IsValidInSection's ancestry check
+		// alone cannot relate a section the tree does not know to its parents).
+		if len(f.keyword.InSection(enclosingSection)) == 0 {
+			known := f.keyword.SectionsWithKeywords()
+			enclosingSection = f.keyword.SectionTree().NearestKnown(enclosingSection, known)
 		}
 
 		kw := firstKeywordFromNode(n, doc.Content, f.keyword)
@@ -124,17 +126,6 @@ func firstKeywordFromNode(n *sitter.Node, content []byte, kw *keyword.Set) strin
 	return name
 }
 
-// walkNamed depth-first traverses the named-children subtree of n, invoking
-// visit on each node. If visit returns false, the subtree under that node is
-// skipped. Mirrors the unexported helper in package symbols.
-func walkNamed(n *sitter.Node, visit func(*sitter.Node) bool) {
-	if n == nil {
-		return
-	}
-	if !visit(n) {
-		return
-	}
-	for i := uint(0); i < n.NamedChildCount(); i++ {
-		walkNamed(n.NamedChild(i), visit)
-	}
-}
+// walkNamed was previously defined here as a private duplicate of
+// ast.WalkNamed; the diagnostic passes now share the single helper in
+// internal/ast (chunter-mpc).

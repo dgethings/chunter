@@ -265,6 +265,11 @@ func extractFlat(uri string, n *sitter.Node, content []byte) (Symbol, bool) {
 }
 
 // sectionSpec describes how to extract a Symbol from a *_section node.
+//
+// NOTE: this table drives Symbol EXTRACTION (LSP-facing Kind + name field) —
+// a different concern from the AST-kind -> keyword.Section mapping, whose
+// single source of truth is internal/section (chunter-mpc). Keep the two
+// tables in step when adding a section kind.
 type sectionSpec struct {
 	sectionKind string // AST node kind, e.g. "interface_section"
 	kind        Kind   // LSP-facing symbol kind

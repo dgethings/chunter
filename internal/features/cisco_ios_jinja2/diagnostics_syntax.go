@@ -6,6 +6,7 @@ import (
 
 	"github.com/dgethings/chunter/internal/document"
 	"github.com/dgethings/chunter/internal/protocol"
+	"github.com/dgethings/chunter/internal/section"
 	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
@@ -68,7 +69,7 @@ func (f *CiscoIOSFeature) runSyntaxDiagnostics(doc *document.Document, tree *sit
 func missingDiagnostic(n *sitter.Node, content []byte) protocol.Diagnostic {
 	if n.Kind() == "eos" {
 		if parent := n.Parent(); parent != nil {
-			if _, ok := sectionForNodeMap[parent.Kind()]; ok {
+			if section.IsSectionHeader(parent) {
 				if hdr := sectionHeaderNode(parent); hdr != nil {
 					return protocol.Diagnostic{
 						Range:    protocol.LineRange(hdr.StartPosition().Row, hdr.StartPosition().Column, hdr.EndPosition().Column),

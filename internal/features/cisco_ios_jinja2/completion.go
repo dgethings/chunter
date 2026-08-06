@@ -10,32 +10,26 @@ import (
 	"github.com/dgethings/chunter/internal/document"
 	"github.com/dgethings/chunter/internal/keyword"
 	"github.com/dgethings/chunter/internal/protocol"
-	sitter "github.com/tree-sitter/go-tree-sitter"
+	"github.com/dgethings/chunter/internal/section"
 )
 
-// sectionSpec describes one section type known to both the grammar and the
-// keyword database. It is the single source of truth from which the AST-kind
-// → keyword-Section map and the argument-position regex are derived.
-type sectionSpec struct {
-	astKind    string // tree-sitter node kind, e.g. "interface_section"
-	keywordSec string // keyword.Section value, e.g. "config-if"
-	headerPat  string // regex fragment matching the header keyword prefix, e.g. "interface"
-}
-
-// sectionSpecs lists every section the grammar emits. Add new sections here
-// and only here — both sectionForNodeMap and argumentPositionRe are built from
-// this table.
-var sectionSpecs = []sectionSpec{
-	{"interface_section", "config-if", "interface"},
-	{"router_section", "config-router", `router\s+(?:bgp|ospf)`},
-	{"address_family_section", "config-router-af", "address-family"},
-	{"route_map_section", "config-route-map", "route-map"},
-	{"class_map_section", "config-cmap", "class-map"},
-	{"policy_map_section", "config-pmap", "policy-map"},
-	{"policy_map_class_section", "config-pmap-c", "class"},
-	{"vlan_section", "config-vlan", "vlan"},
-	{"line_section", "config-line", `line(?:\s+(?:console|aux|vty))?`},
-	{"ip_access_list_section", "config-ext-nacl", `ip\s+access-list\s+(?:standard|extended)`},
+// headerKeywordPats are regex fragments matching the keyword prefix of each
+// section header. They power argumentPositionRe (the cursor-past-keyword
+// detector below) and are a completion-specific concern: the canonical
+// AST-kind -> keyword.Section mapping now lives in internal/section
+// (chunter-mpc), so this list is NOT a second source of truth for section
+// identity — only for the keyword-text shapes the argument-position regex must
+// recognize.
+var headerKeywordPats = []string{
+	"interface",
+	`router\s+(?:bgp|ospf)`,
+	"address-family",
+	"route-map",
+	"class-map",
+	"policy-map",
+	"vlan",
+	`line(?:\s+(?:console|aux|vty))?`,
+	`ip\s+access-list\s+(?:standard|extended)`,
 }
 
 // valueCommandPats are non-section commands that take a single value argument
@@ -44,39 +38,6 @@ var sectionSpecs = []sectionSpec{
 var valueCommandPats = []string{
 	"hostname",
 	"version",
-}
-
-// sectionForNodeMap maps tree-sitter *_section node kinds to keyword.Section
-// strings. Built once from sectionSpecs at package init.
-var sectionForNodeMap = func() map[string]string {
-	m := make(map[string]string, len(sectionSpecs))
-	for _, s := range sectionSpecs {
-		m[s.astKind] = s.keywordSec
-	}
-	return m
-}()
-
-// resolveACLSection reads the ip_access_list_header's "type" field to
-// determine whether this is a standard or extended ACL section.
-func resolveACLSection(sectionNode *sitter.Node, content []byte) string {
-	// Find the ip_access_list_header child
-	for i := uint(0); i < sectionNode.NamedChildCount(); i++ {
-		child := sectionNode.NamedChild(i)
-		if child == nil || child.Kind() != "ip_access_list_header" {
-			continue
-		}
-		typeNode := child.ChildByFieldName("type")
-		if typeNode == nil {
-			break
-		}
-		switch string(content[typeNode.StartByte():typeNode.EndByte()]) {
-		case "standard":
-			return "config-std-nacl"
-		case "extended":
-			return "config-ext-nacl"
-		}
-	}
-	return "config-ext-nacl"
 }
 
 
@@ -106,10 +67,7 @@ func resolveACLSection(sectionNode *sitter.Node, content []byte) string {
 // requires the full keyword to appear before the trailing `\s`, so a partial
 // keyword like `route` does not match `router\s+(?:bgp|ospf)`.
 var argumentPositionRe = func() *regexp.Regexp {
-	parts := make([]string, 0, len(sectionSpecs)+len(valueCommandPats))
-	for _, s := range sectionSpecs {
-		parts = append(parts, s.headerPat)
-	}
+	parts := append([]string{}, headerKeywordPats...)
 	parts = append(parts, valueCommandPats...)
 	pattern := `^\s*(?:no\s+)?(?:` + strings.Join(parts, "|") + `)\s`
 	return regexp.MustCompile(pattern)
@@ -163,17 +121,7 @@ func (f *CiscoIOSFeature) Completion(ctx context.Context, doc *document.Document
 	// Resolve the innermost enclosing *_section node to its keyword.Section
 	// value. If the detected section has no keywords in the data, fall back
 	// to the nearest ancestor section that does (via SectionTree.NearestKnown).
-	rawSection := "config"
-	for n := node; n != nil; n = n.Parent() {
-		if n.Kind() == "ip_access_list_section" {
-			rawSection = resolveACLSection(n, doc.Content)
-			break
-		}
-		if s, ok := sectionForNodeMap[n.Kind()]; ok {
-			rawSection = s
-			break
-		}
-	}
+	rawSection, _ := section.EnclosingSection(node, doc.Content)
 
 	// If the grammar detected a section that has no keywords in the data
 	// (e.g. config-ext-nacl when only config-std-nacl keywords exist, or a

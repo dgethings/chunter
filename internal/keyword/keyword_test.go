@@ -150,3 +150,44 @@ func TestLookupSection(t *testing.T) {
 		t.Errorf("LookupSection(missing) = %q, want \"\"", got)
 	}
 }
+
+// TestIsValidInSection_Ancestry covers B4 (chunter-mpc): a keyword documented for
+// a section is also valid in that section's DESCENDANTS (a config-if keyword is
+// valid in config-if-atm-range), but the root "config" is NOT inherited into
+// sub-modes (a global-config keyword such as hostname stays invalid inside an
+// interface or router section).
+func TestIsValidInSection_Ancestry(t *testing.T) {
+	kws := []keyword.Keyword{
+		{Keyword: "speed", Section: "config-if"},             // parent-section keyword
+		{Keyword: "atm-cmd", Section: "config-if-atm-range"}, // forces the child into the tree
+		{Keyword: "hostname", Section: "config"},            // global-config (root) keyword
+		{Keyword: "do", Section: ""},                         // truly universal
+	}
+	s := keyword.NewSet(kws)
+
+	cases := []struct {
+		name    string
+		kw      string
+		section string
+		want    bool
+	}{
+		// B4 ancestry: a config-if keyword is valid in its child config-if-atm-range.
+		{"speed in child config-if-atm-range", "speed", "config-if-atm-range", true},
+		{"speed in config-if (exact)", "speed", "config-if", true},
+		{"speed in unrelated config-router", "speed", "config-router", false},
+		// "config" (root) is NOT inherited: hostname is invalid in sub-modes...
+		{"hostname in config-if", "hostname", "config-if", false},
+		{"hostname in config-router", "hostname", "config-router", false},
+		// ...but valid at the top level.
+		{"hostname in config", "hostname", "config", true},
+		// a universal ("") keyword is valid everywhere.
+		{"do in config-if-atm-range", "do", "config-if-atm-range", true},
+		{"do in config-router", "do", "config-router", true},
+	}
+	for _, tc := range cases {
+		got := s.IsValidInSection(tc.kw, tc.section)
+		if got != tc.want {
+			t.Errorf("IsValidInSection(%q, %q) = %v, want %v", tc.kw, tc.section, got, tc.want)
+		}
+	}
+}
