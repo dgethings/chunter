@@ -1,4 +1,4 @@
-.PHONY: all lsp clean grammar-clean release snapshot release-dry-run generate grammar grammar-bump grammar-root test test-lsp test-grammar workspace
+.PHONY: all lsp clean grammar-clean release snapshot release-dry-run generate grammar grammar-bump grammar-root test test-lsp test-grammar cover cover-html workspace
 
 TS ?= tree-sitter
 # Sibling grammar repo (tree-sitter-cisco-ios-jinja2). OPTIONAL: chunter depends
@@ -66,6 +66,25 @@ test: test-lsp
 
 test-lsp:
 	CGO_ENABLED=1 go test -race ./...
+
+# ---------------------------------------------------------------------------
+# Coverage — CGO-enabled suite with a total-coverage floor (COVER_MIN).
+# The floor is a TOTAL percentage only: per-package floors are intentionally
+# not gated yet to avoid churn (keyword is the high-water mark at ~92%).
+# Measured total today is ~75.7%, so COVER_MIN defaults to 75 (green now);
+# ratchet it up toward 80 as coverage improves. cover.out is gitignored.
+# ---------------------------------------------------------------------------
+COVER_MIN ?= 75
+
+cover:
+	CGO_ENABLED=1 go test -race -cover -coverprofile=cover.out ./...
+	@echo
+	@go tool cover -func=cover.out | awk '/^total:/ { gsub(/%/,"",$$NF); tot=$$NF+0 } { print } END { printf "\n[cover] total %.1f%% (floor %g%%)\n", tot, $(COVER_MIN); if (tot < $(COVER_MIN)) { printf "[cover] FAIL: total %.1f%% is below the %g%% floor -- set COVER_MIN or add tests\n", tot, $(COVER_MIN); exit 1 } printf "[cover] OK: total %.1f%% >= %g%% floor\n", tot, $(COVER_MIN) }'
+
+# Local convenience: regenerate cover.out and open an HTML report in a browser.
+cover-html:
+	CGO_ENABLED=1 go test -race -cover -coverprofile=cover.out ./...
+	go tool cover -html=cover.out
 
 # ---------------------------------------------------------------------------
 # Grammar dependency management

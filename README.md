@@ -274,8 +274,18 @@ make              # build bin/chunter (also regenerates the grammar binding if g
 make test-lsp     # go test ./... (CGO required)
 make test-ts      # tree-sitter test in the sibling grammar repo
 make test         # both
+make cover        # go test -race -cover; prints per-package + total, fails below COVER_MIN (default 75)
+make cover-html   # regenerate cover.out and open an HTML report in the browser
 make snapshot     # local goreleaser snapshot build
 ```
+
+**Coverage gate.** `make cover` runs the CGO-enabled suite with `-race -cover`,
+prints `go tool cover -func` (per-package + `total:`), and exits non-zero when
+the total falls below the `COVER_MIN` floor (default `75`; measured total is
+~75.7%). Override the floor for a single run with `make cover COVER_MIN=80`, or
+bump the default in the `Makefile` to ratchet it upward. The floor is total-only
+by design — per-package floors are deferred to avoid churn. The `keyword`
+package (~92%) sets the high-water mark.
 
 See [PLAN.md](PLAN.md) for the multi-phase design that landed the current feature set, and [PLAN-IP-ACCESS-LIST.md](PLAN-IP-ACCESS-LIST.md) for the next planned grammar refinement.
 
