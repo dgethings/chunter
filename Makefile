@@ -1,7 +1,14 @@
-.PHONY: all lsp clean release snapshot release-dry-run generate test test-lsp test-ts
+.PHONY: all lsp clean release snapshot release-dry-run generate test test-lsp test-ts workspace
 
 TS ?= tree-sitter
-TS_DIR := ../tree-sitter-cisco-ios-jinja2
+# Sibling grammar repo (tree-sitter-cisco-ios-jinja2). Auto-detected so the
+# build works for both a normal clone (go.mod at the repo root) and a
+# git-worktree checkout (go.mod under a worktree dir such as main/). Override
+# explicitly with: make TS_DIR=/abs/path/to/grammar
+TS_CANDIDATES := ../tree-sitter-cisco-ios-jinja2 ../tree-sitter-cisco-ios-jinja2/main
+TS_DETECTED := $(patsubst %/go.mod,%,$(firstword $(wildcard $(TS_CANDIDATES:%=%/go.mod))))
+TS_DIR ?= $(if $(TS_DETECTED),$(TS_DETECTED),../tree-sitter-cisco-ios-jinja2)
+GRAMMAR_MODULE := github.com/dgethings/tree-sitter-cisco-ios-jinja2
 TS_GRAMMAR := $(TS_DIR)/grammar.js
 TS_PARSER := $(TS_DIR)/src/parser.c
 # Go's cgo cache does not track the parser.c that binding.go #includes, so
@@ -11,6 +18,7 @@ TS_PARSER := $(TS_DIR)/src/parser.c
 TS_HASH_GO := $(TS_DIR)/bindings/go/parser_hash.go
 TS_STAMP := .ts-gen-stamp
 BIN := bin/chunter
+WORKSPACE := go.work
 
 SRCS := $(wildcard main.go cmd/*.go) $(shell find internal -name '*.go')
 
@@ -51,15 +59,28 @@ $(TS_STAMP): $(TS_GRAMMAR)
 
 generate: $(TS_STAMP)
 
-$(BIN): $(TS_STAMP) $(SRCS)
+# go.work is gitignored and machine-local. Its replace directive points the Go
+# toolchain at the sibling grammar module so the local build resolves whether
+# the grammar is a normal clone or a git-worktree checkout (whose go.mod lives
+# under a worktree dir). Regenerated only when the detected grammar root
+# changes; normal clones also resolve via go.mod alone, so CI / fresh checkouts
+# work even when go.work is absent.
+workspace:
+	@tmp=$$(mktemp); \
+	printf 'go 1.26.3\n\nuse .\n\nreplace %s => %s\n' "$(GRAMMAR_MODULE)" "$(TS_DIR)" > $$tmp; \
+	if ! cmp -s $$tmp $(WORKSPACE) 2>/dev/null; then \
+		mv $$tmp $(WORKSPACE); echo "[chunter] wrote $(WORKSPACE) (grammar -> $(TS_DIR))"; \
+	else rm -f $$tmp; fi
+
+$(BIN): $(TS_STAMP) $(SRCS) | workspace
 	CGO_ENABLED=1 go build -o $(BIN) .
 
-lsp:
+lsp: | workspace
 	CGO_ENABLED=1 go build -o $(BIN) .
 
 test: test-lsp test-ts
 
-test-lsp: $(TS_STAMP)
+test-lsp: $(TS_STAMP) | workspace
 	CGO_ENABLED=1 go test -race ./...
 
 test-ts: $(TS_STAMP)

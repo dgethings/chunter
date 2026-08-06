@@ -11,7 +11,7 @@ Powered by a dedicated [tree-sitter-cisco-ios-jinja2](https://github.com/dgethin
 ## Features
 
 | LSP method | What it does |
-|---|---|
+| --- | --- |
 | `textDocument/publishDiagnostics` | Flags version mismatches, undefined references, and duplicate definitions as you type. |
 | `textDocument/hover` | Documentation for the keyword under the cursor, pulled from a built-in IOS command database. |
 | `textDocument/completion` | Section-aware keyword completion (`config` vs `config-if` vs `config-router`). |
@@ -47,7 +47,7 @@ Same diagnostics show up as red/yellow squiggles in any LSP-aware editor.
 chunter builds a per-file symbol table for the following IOS named entities and resolves references between them:
 
 | Kind | Definition sites | Reference introducers |
-|---|---|---|
+| --- | --- | --- |
 | `interface` | `interface NAME` | (planned) |
 | `router` | `router bgp N` / `router ospf N` | (planned) |
 | `route-map` | `route-map NAME permit\|deny SEQ` | `ip policy route-map NAME` |
@@ -96,6 +96,8 @@ git clone https://github.com/dgethings/tree-sitter-cisco-ios-jinja2 ../tree-sitt
 ```
 
 CGO is required (tree-sitter is C). The Makefile sets `CGO_ENABLED=1` automatically.
+
+The Makefile auto-detects the grammar root, so a **git-worktree checkout** of the grammar (where `go.mod` lives under a worktree dir, e.g. `../tree-sitter-cisco-ios-jinja2/main`) builds too: `make` writes a machine-local, gitignored `go.work` pointing the Go toolchain at whichever layout is present. Override the path explicitly with `make TS_DIR=/abs/path/to/grammar`.
 
 ### Binary
 
