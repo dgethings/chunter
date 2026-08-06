@@ -1,0 +1,10 @@
+# golden for undefined_refs.cfg — DO NOT HAND-EDIT; regenerate with:
+#   go test ./internal/features/cisco_ios_jinja2/ -run '^TestGolden/undefined_refs$' -update
+
+## diagnostics
+WARNING  undefined-acl          1:17-21 | undefined acl "ACL1"
+WARNING  undefined-route-map    2:21-24 | undefined route-map "RM1"
+WARNING  undefined-vlan         3:24-27 | undefined vlan "999"
+WARNING  undefined-class-map    6:7-10 | undefined class-map "CM1"
+WARNING  undefined-acl          9:14-18 | undefined acl "ACL2"
+WARNING  undefined-policy-map   11:21-24 | undefined policy-map "PM2"

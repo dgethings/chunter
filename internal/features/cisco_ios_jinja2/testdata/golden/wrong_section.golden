@@ -1,0 +1,7 @@
+# golden for wrong_section.cfg — DO NOT HAND-EDIT; regenerate with:
+#   go test ./internal/features/cisco_ios_jinja2/ -run '^TestGolden/wrong_section$' -update
+
+## diagnostics
+HINT     <no-code>              1:1-11 | speed is valid in config-if, not in config-router
+HINT     <no-code>              2:1-12 | hostname is valid in config, not in config-router
+HINT     <no-code>              5:1-37 | aggregate-address is valid in config-router-af, not in config-if

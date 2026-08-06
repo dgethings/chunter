@@ -1,0 +1,20 @@
+# Cursor marks for clean_all_sections.cfg — positions where cursor-sensitive
+# features (completion / hover) are exercised. Coordinates are 0-indexed
+# (LSP Position semantics) and match the .cfg byte offsets exactly, so the
+# harness feeds the feature the same position a real editor would send.
+#
+# Format:  <line>:<col> <feature> <optional free-form note>
+#
+# The three completion marks target distinct section scopes so the golden
+# proves section-resolution wiring: each scope yields a different item count
+# and fingerprint (config-if, config-vlan, global config).
+
+# hover marks ------------------------------------------------------------
+4:0 hover       hostname keyword -> docstring
+46:0 hover      interface keyword -> docstring
+13:0 hover      'router' token -> nil (exercises the no-hover path)
+
+# completion marks -------------------------------------------------------
+47:1 completion config-if scope (inside the interface body)
+39:0 completion config-vlan scope
+54:0 completion global config scope (top-level line)

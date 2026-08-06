@@ -1,0 +1,5 @@
+# golden for syntax_error.cfg — DO NOT HAND-EDIT; regenerate with:
+#   go test ./internal/features/cisco_ios_jinja2/ -run '^TestGolden/syntax_error$' -update
+
+## diagnostics
+ERROR    syntax-error           0:0-22 | syntax error near "{% if broken_branch %}"

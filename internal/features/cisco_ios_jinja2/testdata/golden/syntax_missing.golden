@@ -1,0 +1,6 @@
+# golden for syntax_missing.cfg — DO NOT HAND-EDIT; regenerate with:
+#   go test ./internal/features/cisco_ios_jinja2/ -run '^TestGolden/syntax_missing$' -update
+
+## diagnostics
+ERROR    missing-}}             0:12-12 | missing "}}"
+WARNING  missing-eos            2:0-15 | section "interface Gi0/0" is missing its terminating "!"

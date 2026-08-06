@@ -294,6 +294,22 @@ regression aborts the release before publishing. No sibling grammar checkout is
 needed — both targets use the published module, so the gate holds in a clean
 checkout or CI.
 
+**Golden integration tests.** The LSP feature package has a table-driven
+golden-file suite (`TestGolden`) that feeds realistic configs through the full
+pipeline — parse, `symbols.Index`, every diagnostic pass, plus `Completion` /
+`Hover` at marked cursor positions — and compares the output against checked-in
+`.golden` files. It runs as part of `make test-lsp` (no extra target); a
+deliberate regression fails with a unified-style diff naming the changed
+lines. Regenerate the goldens after an intentional behavior change:
+
+```bash
+go test ./internal/features/cisco_ios_jinja2/ -run TestGolden -update
+```
+
+See
+[`internal/features/cisco_ios_jinja2/testdata/golden/README.md`](internal/features/cisco_ios_jinja2/testdata/golden/README.md)
+for the fixture format and how to add one.
+
 See [PLAN.md](PLAN.md) for the multi-phase design that landed the current feature set, and [PLAN-IP-ACCESS-LIST.md](PLAN-IP-ACCESS-LIST.md) for the next planned grammar refinement.
 
 ---

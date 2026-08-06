@@ -1,0 +1,25 @@
+# golden for clean_all_sections.cfg — DO NOT HAND-EDIT; regenerate with:
+#   go test ./internal/features/cisco_ios_jinja2/ -run '^TestGolden/clean_all_sections$' -update
+
+## diagnostics
+<none>
+
+## hover @ 4:0  hostname keyword -> docstring
+kind=plaintext
+To specify or modify the hostname for the network server, use the hostname command in global configuration mode.
+
+## hover @ 46:0  interface keyword -> docstring
+kind=plaintext
+To configure an interface type and to enter interface configuration mode, use the interface command in the appropriate configuration mode.
+
+## hover @ 13:0  'router' token -> nil (exercises the no-hover path)
+<none>
+
+## completion @ 47:1  config-if scope (inside the interface body)
+2718 items  sha256:601eef186a455ebe
+
+## completion @ 39:0  config-vlan scope
+14 items  sha256:02dda42ac35cd849
+
+## completion @ 54:0  global config scope (top-level line)
+3819 items  sha256:174806a2e8479b98

@@ -1,0 +1,5 @@
+# golden for version_mismatch.cfg — DO NOT HAND-EDIT; regenerate with:
+#   go test ./internal/features/cisco_ios_jinja2/ -run '^TestGolden/version_mismatch$' -update
+
+## diagnostics
+ERROR    version-mismatch       2:0-12 | running version and configured version mismatch
