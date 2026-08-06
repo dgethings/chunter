@@ -2,9 +2,8 @@ package cisco_ios_jinja2
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
-	"os"
+	"runtime/debug"
 
 	"github.com/dgethings/chunter/internal/document"
 	"github.com/dgethings/chunter/internal/keyword"
@@ -28,15 +27,33 @@ type CiscoIOSFeature struct {
 func New() *CiscoIOSFeature {
 	p := sitter.NewParser()
 	p.SetLanguage(sitter.NewLanguage(ts.Language()))
-	if info, err := os.Stat("../tree-sitter-cisco-ios-jinja2/src/parser.c"); err == nil {
-		slog.Info("parser version", "cisco_ios", fmt.Sprintf("%v", info.ModTime()))
-	}
+	slog.Info("grammar", "module", GrammarModule, "version", GrammarVersion())
 	return &CiscoIOSFeature{
 		parser:  p,
 		trees:   make(map[string]*sitter.Tree),
 		keyword: keyword.NewSet(Keywords),
 		symbols: symbols.NewTable(),
 	}
+}
+
+// GrammarModule is the tree-sitter grammar dependency, pulled from go.mod at
+// build time. Keep in sync with the require line in go.mod.
+const GrammarModule = "github.com/dgethings/tree-sitter-cisco-ios-jinja2"
+
+// GrammarVersion reads the resolved version of the grammar module from the
+// binary's build info (populated at `go build`). Returns "" when build info is
+// unavailable (e.g. a stripped binary that lacks it).
+func GrammarVersion() string {
+	bi, ok := debug.ReadBuildInfo()
+	if !ok {
+		return ""
+	}
+	for _, dep := range bi.Deps {
+		if dep.Path == GrammarModule {
+			return dep.Version
+		}
+	}
+	return ""
 }
 
 func (f *CiscoIOSFeature) LanguageID() string {

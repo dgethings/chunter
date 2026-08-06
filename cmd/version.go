@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/dgethings/chunter/internal/features/cisco_ios_jinja2"
 	"github.com/spf13/cobra"
 )
 
@@ -11,6 +12,9 @@ var versionCmd = &cobra.Command{
 	Short: "Print the version",
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println(Version)
+		if v := cisco_ios_jinja2.GrammarVersion(); v != "" {
+			fmt.Printf("grammar: %s %s\n", cisco_ios_jinja2.GrammarModule, v)
+		}
 	},
 }
 

@@ -83,21 +83,27 @@ cd chunter
 make                                    # builds bin/chunter
 ```
 
-The build pulls in the sibling tree-sitter grammar via a `replace` directive in `go.mod`:
+The tree-sitter grammar is a normal Go dependency (published at [github.com/dgethings/tree-sitter-cisco-ios-jinja2](https://github.com/dgethings/tree-sitter-cisco-ios-jinja2)); `make` fetches it from the module proxy — **no sibling checkout is required to build or test**. CGO is required (tree-sitter is C); the Makefile sets `CGO_ENABLED=1` automatically.
 
-```
-replace github.com/dgethings/tree-sitter-cisco-ios-jinja2 => ../tree-sitter-cisco-ios-jinja2
+Bump the grammar version:
+
+```bash
+make grammar-bump                        # to @latest
+make grammar-bump GRAMMAR_VERSION=v0.3.1  # to a specific tag
 ```
 
-So clone the grammar next to chunter:
+The version is the `require` line in `go.mod`; `chunter version` also prints it.
+
+**Contributing to the grammar alongside chunter:** clone the sibling repo next to chunter and run `make workspace` to write a machine-local, gitignored `go.work` that points chunter at your local grammar tree (normal clone or git-worktree checkout — both are auto-detected) instead of the published module:
 
 ```bash
 git clone https://github.com/dgethings/tree-sitter-cisco-ios-jinja2 ../tree-sitter-cisco-ios-jinja2
+make workspace                           # opt-in local override (writes go.work)
+make grammar                             # rebuild the local grammar binding
+make test-grammar                        # run the grammar's tree-sitter corpus
 ```
 
-CGO is required (tree-sitter is C). The Makefile sets `CGO_ENABLED=1` automatically.
-
-The Makefile auto-detects the grammar root, so a **git-worktree checkout** of the grammar (where `go.mod` lives under a worktree dir, e.g. `../tree-sitter-cisco-ios-jinja2/main`) builds too: `make` writes a machine-local, gitignored `go.work` pointing the Go toolchain at whichever layout is present. Override the path explicitly with `make TS_DIR=/abs/path/to/grammar`.
+Remove `go.work` (or `make clean-workspace`) to revert to the published module.
 
 ### Binary
 
