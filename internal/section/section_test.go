@@ -41,10 +41,10 @@ func parseRoot(t *testing.T, src string) *sitter.Node {
 
 func TestEnclosingSection(t *testing.T) {
 	cases := []struct {
-		name           string
-		line, col      uint
-		wantSection    string
-		wantProtocol   string
+		name         string
+		line, col    uint
+		wantSection  string
+		wantProtocol string
 	}{
 		{"interface body -> config-if", 1, 1, "config-if", ""},
 		{"router bgp body -> config-router/bgp", 4, 1, "config-router", "bgp"},
@@ -124,14 +124,14 @@ func TestIsSectionHeader(t *testing.T) {
 
 func TestSectionForKind(t *testing.T) {
 	cases := map[string]string{
-		"interface_section":      "config-if",
-		"router_section":         "config-router",
-		"address_family_section": "config-router-af",
+		"interface_section":        "config-if",
+		"router_section":           "config-router",
+		"address_family_section":   "config-router-af",
 		"policy_map_class_section": "config-pmap-c",
 		// ip_access_list_section resolves dynamically (standard/extended), so it
 		// has no static mapping.
 		"ip_access_list_section": "",
-		"command_line":          "",
+		"command_line":           "",
 	}
 	for kind, want := range cases {
 		if got := section.SectionForKind(kind); got != want {

@@ -40,7 +40,6 @@ var valueCommandPats = []string{
 	"version",
 }
 
-
 // of a section header or value-taking command. Used by inArgumentPosition to
 // suppress keyword completion while the user is typing a value into a
 // placeholder. Built once from sectionSpecs and valueCommandPats at package

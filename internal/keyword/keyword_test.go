@@ -160,7 +160,7 @@ func TestIsValidInSection_Ancestry(t *testing.T) {
 	kws := []keyword.Keyword{
 		{Keyword: "speed", Section: "config-if"},             // parent-section keyword
 		{Keyword: "atm-cmd", Section: "config-if-atm-range"}, // forces the child into the tree
-		{Keyword: "hostname", Section: "config"},            // global-config (root) keyword
+		{Keyword: "hostname", Section: "config"},             // global-config (root) keyword
 		{Keyword: "do", Section: ""},                         // truly universal
 	}
 	s := keyword.NewSet(kws)
