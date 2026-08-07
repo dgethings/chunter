@@ -685,3 +685,55 @@ func TestArgumentPositionRegexDerived(t *testing.T) {
 		}
 	}
 }
+
+// TestCompletionEnterModeDetail verifies that completion items for mode-opening
+// commands indicate the config sub-mode they enter, derived from the keyword's
+// EnterMode field (chunter-fj1). It also verifies the carve-outs: a negated
+// form ("no interface") and a non-mode-opening command ("hostname") carry no
+// entered-mode Detail.
+func TestCompletionEnterModeDetail(t *testing.T) {
+	f := cisco_ios_jinja2.New()
+	defer f.Close()
+
+	// Cursor at the start of a top-level command resolves to global-config
+	// scope, where interface/router/policy-map/etc. are offered.
+	content := []byte("!\nhostname r1\n!\n")
+	doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, content)
+	if _, err := f.DidOpen(context.Background(), doc); err != nil {
+		t.Fatalf("DidOpen: %v", err)
+	}
+	items, err := f.Completion(context.Background(), doc, protocol.Position{Line: 1, Character: 0})
+	if err != nil {
+		t.Fatalf("Completion: %v", err)
+	}
+
+	cases := []struct {
+		label   string
+		wantSub string // substring expected in Detail
+	}{
+		{"interface", "config-if"},
+		{"router bgp", "config-router"},
+		{"router ospf", "config-router"},
+		{"archive", "config-archive"},
+		{"class-map", "config-cmap"},
+	}
+	for _, c := range cases {
+		it := findItemByLabel(items, c.label)
+		if it == nil {
+			t.Errorf("no completion item labeled %q", c.label)
+			continue
+		}
+		if !strings.Contains(it.Detail, c.wantSub) {
+			t.Errorf("item %q: Detail = %q, want substring %q", c.label, it.Detail, c.wantSub)
+		}
+	}
+
+	// Negated forms do not enter the mode, so they must not advertise one.
+	if it := findItemByLabel(items, "no interface"); it != nil && it.Detail != "" {
+		t.Errorf("negated %q should not indicate an entered mode; Detail = %q", "no interface", it.Detail)
+	}
+	// A non-mode-opening command has no Detail.
+	if it := findItemByLabel(items, "hostname"); it != nil && it.Detail != "" {
+		t.Errorf("non-mode-opening %q should have empty Detail; got %q", "hostname", it.Detail)
+	}
+}

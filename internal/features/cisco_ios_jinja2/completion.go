@@ -175,8 +175,17 @@ func createItems(kws keyword.Keywords) []protocol.CompletionItem {
 					Value: kw.Description.Value,
 				}
 			}
+			// Mode-opening commands carry EnterMode (the sub-mode they open, e.g.
+			// interface -> config-if). Surface it as the completion Detail so the
+			// candidate indicates where it lands. Negated forms ("no <kw>") do
+			// not enter the mode, so they are excluded (chunter-fj1).
+			var detail string
+			if kw.EnterMode != "" && !strings.HasPrefix(s, "no ") {
+				detail = "Enters " + kw.EnterMode + " mode"
+			}
 			items = append(items, protocol.CompletionItem{
 				Label:            label,
+				Detail:           detail,
 				Documentation:    doc,
 				FilterText:       &filterText,
 				InsertText:       &snippet,
