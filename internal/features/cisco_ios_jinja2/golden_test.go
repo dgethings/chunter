@@ -247,14 +247,26 @@ func formatCompletion(items []protocol.CompletionItem) string {
 	return fmt.Sprintf("%d items  sha256:%s\n", len(items), hex.EncodeToString(h[:8]))
 }
 
-// formatHover renders the hover result. The value is the keyword docstring;
-// these are bounded (one keyword's description) so dumping it verbatim is both
-// diffable and meaningful (it is the actual contract). nil renders "<none>".
+// formatHover renders the hover result. nil renders "<none>".
+//
+// The value is bounded to the first hoverPreviewBytes: a sparse command's
+// PlainText description is short and shown verbatim, but a rich Markdown
+// hover (chunter-97u) can be several thousand bytes (interface's Usage
+// Guidelines alone is ~35KB). Truncating keeps the golden diffable and focused
+// on the leading structure (kind + description + first section header) while
+// the full per-section rendering is covered by the inline buildHoverContent
+// unit tests. A trailing marker records the truncation.
+const hoverPreviewBytes = 800
+
 func formatHover(hv *protocol.HoverResult) string {
 	if hv == nil {
 		return "<none>\n"
 	}
-	return fmt.Sprintf("kind=%s\n%s\n", hv.Contents.Kind, hv.Contents.Value)
+	v := hv.Contents.Value
+	if len(v) > hoverPreviewBytes {
+		v = v[:hoverPreviewBytes] + fmt.Sprintf("\n… [truncated, %d bytes total]", len(hv.Contents.Value))
+	}
+	return fmt.Sprintf("kind=%s\n%s\n", hv.Contents.Kind, v)
 }
 
 // formatRange renders an LSP range compactly: "L:C-C" for a single-line span,

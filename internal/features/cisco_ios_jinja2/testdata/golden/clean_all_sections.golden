@@ -5,12 +5,22 @@
 <none>
 
 ## hover @ 4:0  hostname keyword -> docstring
-kind=plaintext
+kind=markdown
 To specify or modify the hostname for the network server, use the hostname command in global configuration mode.
 
+**Usage Guidelines**
+
+The hostname is used in prompts and default configuration filenames. Do not expect case to be preserved. Uppercase and lowercase characters look the same to many internet software applications. It may seem appropriate to capitalize a name the same way you might do in English, but conventions dictate that computer names appear all lowercase. For more information, refer to RFC 1178, Choosing a Name for Your Computer . The name must also follow the rules for ARPANET hostnames. They must start with a letter, end with a letter or digit, and have as interior characters only letters, digits, and hyphens. Names must be 63 characters or fewer. Creating an all numer
+… [truncated, 2430 bytes total]
+
 ## hover @ 46:0  interface keyword -> docstring
-kind=plaintext
+kind=markdown
 To configure an interface type and to enter interface configuration mode, use the interface command in the appropriate configuration mode.
+
+**Usage Guidelines**
+
+This command does not have a no form except for Cisco ASR 901 Series Aggregation Services Routers. The table below displays the keywords that represent the types of interfaces that can be configured with the interface command. Replace the type argument with the appropriate keyword from the table. Table 3. Interface Type Keywords Keyword Interface Type analysis-module Analysis module interface. The analysis module interface is a Fast Ethernet interface on the router that connects to the internal interface on the Network Analysis Module (NAM). This interface cannot be configured for subinterfaces or for speed, duplex mode, and simil
+… [truncated, 15228 bytes total]
 
 ## hover @ 13:0  'router' token -> nil (exercises the no-hover path)
 <none>
