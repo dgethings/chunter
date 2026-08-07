@@ -191,3 +191,53 @@ func TestIsValidInSection_Ancestry(t *testing.T) {
 		}
 	}
 }
+
+// TestLookupSection_MatchesLinearScan is the chunter-4qw regression guard for
+// the O(1) map-based LookupSection: it must return exactly what the original
+// linear scan returned — the first non-empty Section in document order —
+// across duplicates, multi-section entries, trailing-empty entries, and
+// unknown names.
+func TestLookupSection_MatchesLinearScan(t *testing.T) {
+	kws := []keyword.Keyword{
+		{Keyword: "dup", Section: "config-if"},
+		{Keyword: "dup", Section: "config-router"}, // later duplicate must NOT win
+		{Keyword: "shared", Section: ""},
+		{Keyword: "shared", Section: "config"},
+		{Keyword: "only-global", Section: ""},
+		{Keyword: "solo", Section: "config-vlan"},
+		{Keyword: "trailing-empty", Section: "config-line"},
+		{Keyword: "trailing-empty", Section: ""}, // later empty must NOT clear the value
+	}
+	s := keyword.NewSet(kws)
+	bruteForce := func(name string) string { // the pre-refactor linear scan
+		for _, kw := range kws {
+			if kw.Keyword == name && kw.Section != "" {
+				return kw.Section
+			}
+		}
+		return ""
+	}
+	for _, name := range []string{"dup", "shared", "only-global", "solo", "trailing-empty", "missing"} {
+		want := bruteForce(name)
+		if got := s.LookupSection(name); got != want {
+			t.Errorf("LookupSection(%q) = %q, want %q", name, got, want)
+		}
+	}
+}
+
+// TestInSection_NoAllocations proves InSection returns a precomputed, shared
+// slice: it allocates 0 times per call (chunter-4qw), so it is safe to call on
+// every completion request.
+func TestInSection_NoAllocations(t *testing.T) {
+	s := keyword.NewSet([]keyword.Keyword{
+		{Keyword: "global", Section: ""},
+		{Keyword: "if-cmd", Section: "config-if"},
+		{Keyword: "rtr-cmd", Section: "config-router"},
+	})
+	for _, section := range []string{"config-if", "config-router", "does-not-exist", ""} {
+		allocs := testing.AllocsPerRun(100, func() { _ = s.InSection(section) })
+		if allocs != 0 {
+			t.Errorf("InSection(%q): %v allocs/call, want 0", section, allocs)
+		}
+	}
+}

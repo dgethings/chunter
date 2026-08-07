@@ -1,7 +1,9 @@
 package symbols_test
 
 import (
+	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -541,4 +543,53 @@ interface Gi1/0
 	if got := tbl.ReferencesAll("file:///test"); len(got) != 0 {
 		t.Errorf("after Clear: got %d refs, want 0", len(got))
 	}
+}
+
+// BenchmarkLookupScaling demonstrates that Lookup/LookupAny/ReferencesLookup
+// are O(1) in the number of indexed symbols: as the document grows, per-call
+// time stays ~flat (the pre-refactor linear scan grew linearly with the
+// symbol/reference count). Run with:
+//
+//	go test ./internal/symbols/ -bench LookupScaling -benchmem
+//
+// chunter-4qw.
+func BenchmarkLookupScaling(b *testing.B) {
+	for _, n := range []int{128, 1024, 8192} {
+		b.Run("symbols="+strconv.Itoa(n), func(b *testing.B) {
+			src, wantInterface, wantRef := benchConfig(n)
+			root, content := parseRootB(b, src)
+			tbl := symbols.NewTable()
+			tbl.Index("file:///bench", root, content)
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_ = tbl.Lookup("file:///bench", symbols.KindInterface, wantInterface)
+				_ = tbl.LookupAny("file:///bench", wantInterface)
+				_ = tbl.ReferencesLookup("file:///bench", symbols.KindACL, wantRef)
+			}
+		})
+	}
+}
+
+// benchConfig builds a config with n interfaces, each referencing an ACL, so
+// the table holds O(n) symbols and O(n) references. wantInterface is the LAST
+// interface name and wantRef the LAST ACL — the worst case for a linear scan.
+func benchConfig(n int) (src, wantInterface, wantRef string) {
+	var b strings.Builder
+	for i := 0; i < n; i++ {
+		fmt.Fprintf(&b, "interface if%d\n ip access-group ACL%d in\n!\n", i, i)
+	}
+	return b.String(), "if" + strconv.Itoa(n-1), "ACL" + strconv.Itoa(n-1)
+}
+
+// parseRootB is the benchmark analogue of parseRoot (takes *testing.B so the
+// cleanup hook registers against the benchmark).
+func parseRootB(b *testing.B, src string) (*sitter.Node, []byte) {
+	p := sitter.NewParser()
+	p.SetLanguage(sitter.NewLanguage(ts_ci.Language()))
+	tree := p.Parse([]byte(src), nil)
+	b.Cleanup(func() {
+		tree.Close()
+		p.Close()
+	})
+	return tree.RootNode(), []byte(src)
 }

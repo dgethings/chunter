@@ -54,6 +54,16 @@ type Set struct {
 	byNameSection map[string]map[string]bool
 	tree          *SectionTree
 	all           []Keyword
+	// inSectionCache precomputes, per section, the global keywords (Section
+	// "") folded together with that section's keywords, so InSection is O(1)
+	// and allocation-free. The cached slices are shared and MUST NOT be
+	// mutated by callers (documented on InSection). Built once in NewSet
+	// (chunter-4qw).
+	inSectionCache map[string][]Keyword
+	// byNameFirstSection maps a keyword name to the first non-empty Section
+	// encountered for it (document order), so LookupSection is an O(1) map
+	// read instead of a linear scan over all entries (chunter-4qw).
+	byNameFirstSection map[string]string
 }
 
 // NewSet builds a Set from a keyword slice, indexing by name and section in a
@@ -66,9 +76,17 @@ func NewSet(kws []Keyword) *Set {
 		bySection: make(map[string][]Keyword),
 		all:       kws,
 	}
+	s.byNameFirstSection = make(map[string]string, len(kws))
 	for _, kw := range kws {
 		s.byName[kw.Keyword] = kw
 		s.bySection[kw.Section] = append(s.bySection[kw.Section], kw)
+		// Record the first non-empty section per name in document order —
+		// exactly what LookupSection returns (chunter-4qw).
+		if kw.Section != "" {
+			if _, ok := s.byNameFirstSection[kw.Keyword]; !ok {
+				s.byNameFirstSection[kw.Keyword] = kw.Section
+			}
+		}
 	}
 
 	// Build the by-name-section index: for each keyword name, the set of
@@ -90,6 +108,22 @@ func NewSet(kws []Keyword) *Set {
 		}
 	}
 	s.tree = BuildSectionTree(sections)
+
+	// Precompute the per-section InSection slices once (globals folded into
+	// every section) so InSection returns a shared, allocation-free slice
+	// (chunter-4qw).
+	globals := s.bySection[""]
+	s.inSectionCache = make(map[string][]Keyword, len(s.bySection))
+	for sec, secKws := range s.bySection {
+		if sec == "" {
+			s.inSectionCache[""] = append([]Keyword(nil), globals...)
+			continue
+		}
+		combined := make([]Keyword, 0, len(globals)+len(secKws))
+		combined = append(combined, globals...)
+		combined = append(combined, secKws...)
+		s.inSectionCache[sec] = combined
+	}
 
 	return s
 }
@@ -136,19 +170,22 @@ func (s *Set) IsValidInSection(name, section string) bool {
 // LookupSection returns the first non-empty Section for the given keyword
 // name, or "" if the keyword is unknown or only global. Used to build
 // diagnostic messages that point the user at where the keyword does belong.
+// O(1) map read over byNameFirstSection (chunter-4qw).
 func (s *Set) LookupSection(name string) string {
-	for _, kw := range s.all {
-		if kw.Keyword == name && kw.Section != "" {
-			return kw.Section
-		}
-	}
-	return ""
+	return s.byNameFirstSection[name]
 }
 
+// InSection returns the keywords valid in section: the global keywords
+// (Section "") plus the keywords whose Section is exactly section. The
+// returned slice is SHARED across calls and MUST NOT be mutated by the
+// caller — it is precomputed once in NewSet for O(1), allocation-free access
+// (chunter-4qw). For a section with no dedicated keywords, only the globals
+// are returned (matching the previous append(globals, nil) behavior).
 func (s *Set) InSection(section string) []Keyword {
-	result := append([]Keyword{}, s.bySection[""]...)
-	result = append(result, s.bySection[section]...)
-	return result
+	if cached, ok := s.inSectionCache[section]; ok {
+		return cached
+	}
+	return s.inSectionCache[""] // unknown section -> just the globals
 }
 
 // SectionTree returns the section hierarchy tree built from the keyword data.

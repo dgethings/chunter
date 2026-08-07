@@ -55,6 +55,12 @@ type Reference struct {
 type docIndex struct {
 	Symbols    []Symbol
 	References []Reference
+	// O(1) lookup indices, built in Table.Index after extraction. They point
+	// into Symbols/References and preserve document order, so the Lookup-
+	// family methods return identical results to a linear scan (chunter-4qw).
+	byKindName    map[Kind]map[string][]*Symbol    // Lookup(kind, name)
+	byName        map[string][]*Symbol             // LookupAny(name)
+	byKindNameRef map[Kind]map[string][]*Reference // ReferencesLookup(kind, name)
 }
 
 // Table is a per-URI index of Symbol definitions and Reference uses. Lookups
@@ -77,9 +83,40 @@ func (t *Table) Index(uri string, root *sitter.Node, content []byte) {
 		Symbols:    Extract(uri, root, content),
 		References: ExtractReferences(uri, root, content),
 	}
+	di.buildIndices()
 	t.mu.Lock()
 	t.byURI[uri] = di
 	t.mu.Unlock()
+}
+
+// buildIndices populates the O(1) lookup maps from Symbols/References in
+// document order. Pointers into the backing slices keep the maps consistent;
+// the slices are never mutated after Index, so the pointers stay valid for
+// the life of the docIndex. Called from Index (under the write lock).
+// chunter-4qw.
+func (di *docIndex) buildIndices() {
+	di.byKindName = make(map[Kind]map[string][]*Symbol)
+	di.byName = make(map[string][]*Symbol, len(di.Symbols))
+	for i := range di.Symbols {
+		s := &di.Symbols[i]
+		m := di.byKindName[s.Kind]
+		if m == nil {
+			m = make(map[string][]*Symbol)
+			di.byKindName[s.Kind] = m
+		}
+		m[s.Name] = append(m[s.Name], s)
+		di.byName[s.Name] = append(di.byName[s.Name], s)
+	}
+	di.byKindNameRef = make(map[Kind]map[string][]*Reference)
+	for i := range di.References {
+		r := &di.References[i]
+		m := di.byKindNameRef[r.Kind]
+		if m == nil {
+			m = make(map[string][]*Reference)
+			di.byKindNameRef[r.Kind] = m
+		}
+		m[r.Name] = append(m[r.Name], r)
+	}
 }
 
 // Clear removes all symbols and references for uri.
@@ -100,34 +137,32 @@ func (t *Table) All(uri string) []Symbol {
 	return nil
 }
 
-// Lookup returns symbols matching kind+name in uri.
+// Lookup returns symbols matching kind+name in uri, in document order. O(1)
+// average via the byKindName index (chunter-4qw).
 func (t *Table) Lookup(uri string, kind Kind, name string) []Symbol {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	var out []Symbol
-	if di, ok := t.byURI[uri]; ok {
-		for _, s := range di.Symbols {
-			if s.Kind == kind && s.Name == name {
-				out = append(out, s)
-			}
-		}
+	di, ok := t.byURI[uri]
+	if !ok {
+		return nil
 	}
-	return out
+	m := di.byKindName[kind]
+	if m == nil {
+		return nil
+	}
+	return copySymbols(m[name])
 }
 
-// LookupAny returns symbols in uri with a matching name regardless of kind.
+// LookupAny returns symbols in uri with a matching name regardless of kind,
+// in document order. O(1) average via the byName index (chunter-4qw).
 func (t *Table) LookupAny(uri string, name string) []Symbol {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	var out []Symbol
-	if di, ok := t.byURI[uri]; ok {
-		for _, s := range di.Symbols {
-			if s.Name == name {
-				out = append(out, s)
-			}
-		}
+	di, ok := t.byURI[uri]
+	if !ok {
+		return nil
 	}
-	return out
+	return copySymbols(di.byName[name])
 }
 
 // ReferencesAll returns every reference indexed for uri, in document order.
@@ -141,19 +176,46 @@ func (t *Table) ReferencesAll(uri string) []Reference {
 	return nil
 }
 
-// ReferencesLookup returns references in uri whose Kind and Name match. Used
-// by the References LSP feature ("find all usages of this symbol") and by
-// the unused-definition diagnostic ("any reference to this definition?").
+// ReferencesLookup returns references in uri whose Kind and Name match, in
+// document order. Used by the References LSP feature ("find all usages of
+// this symbol") and by the unused-definition diagnostic ("any reference to
+// this definition?"). O(1) average via the byKindNameRef index (chunter-4qw).
 func (t *Table) ReferencesLookup(uri string, kind Kind, name string) []Reference {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	var out []Reference
-	if di, ok := t.byURI[uri]; ok {
-		for _, r := range di.References {
-			if r.Kind == kind && r.Name == name {
-				out = append(out, r)
-			}
-		}
+	di, ok := t.byURI[uri]
+	if !ok {
+		return nil
+	}
+	m := di.byKindNameRef[kind]
+	if m == nil {
+		return nil
+	}
+	return copyReferences(m[name])
+}
+
+// copySymbols dereferences a slice of symbol pointers into a fresh value
+// slice, returning nil for empty input so callers observe the same nil-vs-
+// empty semantics as the original linear-scan implementation. chunter-4qw.
+func copySymbols(src []*Symbol) []Symbol {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make([]Symbol, len(src))
+	for i, s := range src {
+		out[i] = *s
+	}
+	return out
+}
+
+// copyReferences is the Reference analogue of copySymbols. chunter-4qw.
+func copyReferences(src []*Reference) []Reference {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make([]Reference, len(src))
+	for i, r := range src {
+		out[i] = *r
 	}
 	return out
 }
