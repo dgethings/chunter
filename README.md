@@ -271,9 +271,9 @@ The tree-sitter grammar lives in a sibling repo: [tree-sitter-cisco-ios-jinja2](
 
 ```bash
 make              # build bin/chunter (also regenerates the grammar binding if grammar.js changed)
-make test-lsp     # go test ./... (CGO required)
-make test-ts      # tree-sitter test in the sibling grammar repo
-make test         # both
+make test-lsp     # CGO_ENABLED=1 go test -race ./...
+make test-grammar # tree-sitter corpus test in the sibling grammar repo (needs the checkout)
+make test         # test-lsp only (Go suite); run test-grammar separately for the corpus
 make cover        # go test -race -cover; prints per-package + total, fails below COVER_MIN (default 75)
 make cover-html   # regenerate cover.out and open an HTML report in the browser
 make snapshot     # local goreleaser snapshot build
