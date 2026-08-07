@@ -1,8 +1,12 @@
 package cisco_ios_jinja2
 
 import (
+	"fmt"
 	"regexp"
+	"strconv"
+	"strings"
 
+	"github.com/dgethings/chunter/internal/ast"
 	"github.com/dgethings/chunter/internal/document"
 	"github.com/dgethings/chunter/internal/protocol"
 	sitter "github.com/tree-sitter/go-tree-sitter"
@@ -32,7 +36,6 @@ func (f *CiscoIOSFeature) runVersionMismatchDiagnostics(doc *document.Document, 
 	}
 
 	var cfgVerNode, cfgVerField *sitter.Node
-	var runVer string
 	for i := uint(0); i < root.NamedChildCount(); i++ {
 		c := root.NamedChild(i)
 		if c == nil {
@@ -42,14 +45,9 @@ func (f *CiscoIOSFeature) runVersionMismatchDiagnostics(doc *document.Document, 
 			cfgVerNode = c
 			cfgVerField = c.ChildByFieldName("configured_version")
 		}
-		if runVer == "" && c.Kind() == "comment" {
-			text := string(doc.Content[c.StartByte():c.EndByte()])
-			if m := runningVersionRe.FindStringSubmatch(text); m != nil {
-				runVer = m[1]
-			}
-		}
 	}
 
+	runVer := runningVersion(doc, tree)
 	var cfgVer string
 	if cfgVerField != nil {
 		cfgVer = string(doc.Content[cfgVerField.StartByte():cfgVerField.EndByte()])
@@ -65,4 +63,140 @@ func (f *CiscoIOSFeature) runVersionMismatchDiagnostics(doc *document.Document, 
 	}
 
 	return diags
+}
+
+// runCommandVersionDiagnostics emits a Hint for each command whose documented
+// MinVersion is later than the running version (recorded in a `! version X`
+// comment): the command was introduced after the image currently running the
+// config, so it may not be recognized. Only the introduced-after signal is
+// implemented: the scraper's MaxVersion extraction is too unreliable to flag
+// safely (thousands of clean-numeric MaxVersion values are smaller than a
+// modern running version — e.g. hostname=15.0 — which would flood clean
+// configs with false positives). Both version comparators refuse non-numeric
+// components, so a heuristic value like "3.9S" is treated as incomparable and
+// never flagged (chunter-y9d).
+//
+// The running version is required; with no `! version X` comment the pass is
+// a no-op (there is nothing to compare against).
+func (f *CiscoIOSFeature) runCommandVersionDiagnostics(doc *document.Document, tree *sitter.Tree) []protocol.Diagnostic {
+	if tree == nil {
+		return nil
+	}
+	root := tree.RootNode()
+	if root == nil {
+		return nil
+	}
+	runVer := runningVersion(doc, tree)
+	if runVer == "" {
+		return nil
+	}
+
+	var diags []protocol.Diagnostic
+	ast.WalkNamed(root, func(n *sitter.Node) bool {
+		kind := n.Kind()
+		if kind == "negated_statement" {
+			return true // descend into the inner command (mirrors wrong-section)
+		}
+		if kind != "command_line" && !strings.HasSuffix(kind, "_statement") {
+			return true
+		}
+		name := firstKeywordFromNode(n, doc.Content, f.keyword)
+		if name == "" {
+			return true
+		}
+		kw, ok := f.keyword.Lookup(name)
+		if !ok || kw.MinVersion == "" {
+			return true
+		}
+		cmp, comparable := compareVersions(kw.MinVersion, runVer)
+		if !comparable || cmp <= 0 {
+			return true
+		}
+		diags = append(diags, protocol.Diagnostic{
+			Range:    protocol.LineRange(n.StartPosition().Row, n.StartPosition().Column, n.EndPosition().Column),
+			Severity: protocol.SeverityHint,
+			Source:   "chunter",
+			Code:     "version-introduced",
+			Message:  fmt.Sprintf("%s was introduced in release %s, later than the running version %s", name, kw.MinVersion, runVer),
+		})
+		return true
+	})
+	return diags
+}
+
+// runningVersion returns the IOS version recorded in the first `! version X`
+// top-level comment, or "" when none is present. show-run emits the running
+// version as the first comment, so first-wins matches the on-wire order.
+func runningVersion(doc *document.Document, tree *sitter.Tree) string {
+	if tree == nil {
+		return ""
+	}
+	root := tree.RootNode()
+	if root == nil {
+		return ""
+	}
+	for i := uint(0); i < root.NamedChildCount(); i++ {
+		c := root.NamedChild(i)
+		if c == nil || c.Kind() != "comment" {
+			continue
+		}
+		if m := runningVersionRe.FindStringSubmatch(string(doc.Content[c.StartByte():c.EndByte()])); m != nil {
+			return m[1]
+		}
+	}
+	return ""
+}
+
+// compareVersions compares two dot-separated IOS version strings component by
+// component (e.g. "12.2" < "17.3", "26.1.0" > "17.3"). It returns (cmp, true)
+// where cmp is -1, 0, or 1, or (0, false) when either version contains a
+// component that is not a pure integer (e.g. "3.9S", "15.7(3)M"): such values
+// are not safely comparable and callers must refuse to flag on them. When the
+// versions share a common prefix and differ in length, the longer one is
+// greater only if a trailing component is non-zero (so 17.3 == 17.3.0).
+func compareVersions(a, b string) (int, bool) {
+	ap := strings.Split(a, ".")
+	bp := strings.Split(b, ".")
+	for _, p := range ap {
+		if _, err := strconv.Atoi(p); err != nil {
+			return 0, false
+		}
+	}
+	for _, p := range bp {
+		if _, err := strconv.Atoi(p); err != nil {
+			return 0, false
+		}
+	}
+	n := len(ap)
+	if len(bp) < n {
+		n = len(bp)
+	}
+	for i := 0; i < n; i++ {
+		ai, _ := strconv.Atoi(ap[i])
+		bi, _ := strconv.Atoi(bp[i])
+		if ai != bi {
+			if ai < bi {
+				return -1, true
+			}
+			return 1, true
+		}
+	}
+	// Common prefix equal: decide on the longer tail.
+	if len(ap) == len(bp) {
+		return 0, true
+	}
+	if len(ap) > len(bp) {
+		for i := n; i < len(ap); i++ {
+			if v, _ := strconv.Atoi(ap[i]); v != 0 {
+				return 1, true
+			}
+		}
+		return 0, true
+	}
+	for i := n; i < len(bp); i++ {
+		if v, _ := strconv.Atoi(bp[i]); v != 0 {
+			return -1, true
+		}
+	}
+	return 0, true
 }

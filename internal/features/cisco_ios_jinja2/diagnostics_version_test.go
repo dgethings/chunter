@@ -1,7 +1,10 @@
 package cisco_ios_jinja2_test
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/dgethings/chunter/internal/protocol"
 )
 
 // TestVersionMismatchDiagnostics covers the version-mismatch pass: matching
@@ -68,5 +71,64 @@ func TestVersionMismatchDiagnostics_FirstCommentWins(t *testing.T) {
 	diags := openDiags(t, src)
 	if _, found := findDiagByCode(diags, "version-mismatch"); found {
 		t.Errorf("first comment said 17.3 == config 17.3; expected no mismatch, got: %+v", diags)
+	}
+}
+
+// TestCommandVersionDiagnostics covers the per-command introduced-after-running
+// pass (chunter-y9d). hostname's MinVersion is 12.2, so under a 12.1 running
+// image it is flagged; under a newer image (or with no running version, or for
+// a command with no MinVersion) nothing fires. Each case asserts exactly the
+// expected presence/absence of a version-introduced diagnostic.
+func TestCommandVersionDiagnostics(t *testing.T) {
+	cases := []struct {
+		name    string
+		src     string
+		wantHit bool
+	}{
+		{
+			name:    "hostname introduced after running 12.1 -> Hint",
+			src:     "! version 12.1\n!\nhostname r1\n!\n",
+			wantHit: true,
+		},
+		{
+			name:    "hostname under its own release 12.2 -> no signal",
+			src:     "! version 12.2\n!\nhostname r1\n!\n",
+			wantHit: false,
+		},
+		{
+			name:    "hostname under a newer release 15.0 -> no signal",
+			src:     "! version 15.0\n!\nhostname r1\n!\n",
+			wantHit: false,
+		},
+		{
+			name:    "no running-version comment -> pass is a no-op",
+			src:     "!\nhostname r1\n!\n",
+			wantHit: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			diags := openDiags(t, tc.src)
+			d, found := findDiagByCode(diags, "version-introduced")
+			if tc.wantHit && !found {
+				t.Fatalf("expected version-introduced diagnostic; got %d diags: %+v", len(diags), diags)
+			}
+			if !tc.wantHit && found {
+				t.Fatalf("did not expect version-introduced diagnostic; got: %+v", d)
+			}
+			if found {
+				if d.Severity != protocol.SeverityHint {
+					t.Errorf("severity: got %d, want Hint (4)", d.Severity)
+				}
+				if d.Source != "chunter" {
+					t.Errorf("source: got %q, want \"chunter\"", d.Source)
+				}
+				for _, want := range []string{"hostname", "12.2", "12.1"} {
+					if !strings.Contains(d.Message, want) {
+						t.Errorf("message %q missing %q", d.Message, want)
+					}
+				}
+			}
+		})
 	}
 }

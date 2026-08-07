@@ -14,13 +14,17 @@ import (
 // Current passes, in order:
 //  0. syntax / missing   (Error/Warning) — diagnostics_syntax.go
 //  1. version mismatch  (SeverityError)   — diagnostics_version.go
-//  2. undefined refs    (SeverityWarning) — diagnostics_refs.go
-//  3. duplicate defs    (SeverityWarning) — diagnostics_refs.go
-//  4. wrong section     (SeverityHint)    — diagnostics_section.go
+//  2. command version   (SeverityHint)    — diagnostics_version.go
+//     (per-command introduced-after-running-version; runs alongside the
+//     other version pass so the whole version family reports together)
+//  3. undefined refs    (SeverityWarning) — diagnostics_refs.go
+//  4. duplicate defs    (SeverityWarning) — diagnostics_refs.go
+//  5. wrong section     (SeverityHint)    — diagnostics_section.go
 func (f *CiscoIOSFeature) runDiagnostics(doc *document.Document, tree *sitter.Tree) []protocol.Diagnostic {
 	diags := make([]protocol.Diagnostic, 0)
 	diags = append(diags, f.runSyntaxDiagnostics(doc, tree)...)
 	diags = append(diags, f.runVersionMismatchDiagnostics(doc, tree)...)
+	diags = append(diags, f.runCommandVersionDiagnostics(doc, tree)...)
 	diags = append(diags, f.runUndefinedReferenceDiagnostics(doc)...)
 	diags = append(diags, f.runDuplicateDefinitionDiagnostics(doc)...)
 	diags = append(diags, f.runWrongSectionDiagnostics(doc, tree)...)
