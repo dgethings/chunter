@@ -20,6 +20,10 @@ import (
 //  3. undefined refs    (SeverityWarning) — diagnostics_refs.go
 //  4. duplicate defs    (SeverityWarning) — diagnostics_refs.go
 //  5. wrong section     (SeverityHint)    — diagnostics_section.go
+//  6. protocol mismatch (SeverityError)   — diagnostics_protocol.go
+//     (cross-protocol: an OSPF command inside a BGP router section, etc.;
+//     runs after wrong-section because it is the more specific, Error-
+//     severity signal, while wrong-section stays Hint)
 func (f *CiscoIOSFeature) runDiagnostics(doc *document.Document, tree *sitter.Tree) []protocol.Diagnostic {
 	diags := make([]protocol.Diagnostic, 0)
 	diags = append(diags, f.runSyntaxDiagnostics(doc, tree)...)
@@ -28,5 +32,6 @@ func (f *CiscoIOSFeature) runDiagnostics(doc *document.Document, tree *sitter.Tr
 	diags = append(diags, f.runUndefinedReferenceDiagnostics(doc)...)
 	diags = append(diags, f.runDuplicateDefinitionDiagnostics(doc)...)
 	diags = append(diags, f.runWrongSectionDiagnostics(doc, tree)...)
+	diags = append(diags, f.runProtocolMismatchDiagnostics(doc, tree)...)
 	return diags
 }
