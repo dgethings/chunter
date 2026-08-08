@@ -28,13 +28,19 @@ type stubFeature struct {
 func (s *stubFeature) LanguageID() string { return s.languageID }
 func (s *stubFeature) Close() error       { return nil }
 
-func (s *stubFeature) DidOpen(ctx context.Context, doc *document.Document) ([]protocol.Diagnostic, error) {
+func (s *stubFeature) DidOpen(ctx context.Context, doc *document.Document, publish func([]protocol.Diagnostic)) ([]protocol.Diagnostic, error) {
 	s.didOpenCalls.Add(1)
+	if publish != nil {
+		publish(s.openDiags)
+	}
 	return s.openDiags, nil
 }
 
-func (s *stubFeature) DidChange(ctx context.Context, doc *document.Document) ([]protocol.Diagnostic, error) {
+func (s *stubFeature) DidChange(ctx context.Context, doc *document.Document, publish func([]protocol.Diagnostic)) ([]protocol.Diagnostic, error) {
 	s.didChangeCalls.Add(1)
+	if publish != nil {
+		publish(s.openDiags)
+	}
 	return s.openDiags, nil
 }
 

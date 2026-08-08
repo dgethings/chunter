@@ -17,7 +17,7 @@ func openDiags(t *testing.T, src string) []protocol.Diagnostic {
 	f := cisco_ios_jinja2.New()
 	defer f.Close()
 	doc := document.New("file:///test.ios.j2", "cisco_ios_jinja2", 1, []byte(src))
-	diags, err := f.DidOpen(context.Background(), doc)
+	diags, err := f.DidOpen(context.Background(), doc, nil)
 	if err != nil {
 		t.Fatalf("DidOpen: %v", err)
 	}

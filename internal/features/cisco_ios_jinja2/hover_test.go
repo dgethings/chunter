@@ -22,7 +22,7 @@ func TestHoverHostname(t *testing.T) {
 	content := []byte("!\n! version 26.1.0\n!\nhostname test\n!\n")
 	doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, content)
 
-	if _, err := f.DidOpen(context.Background(), doc); err != nil {
+	if _, err := f.DidOpen(context.Background(), doc, nil); err != nil {
 		t.Fatalf("DidOpen failed: %v", err)
 	}
 
@@ -55,7 +55,7 @@ func TestHoverNoKeyword(t *testing.T) {
 	content := []byte("!\n! version 26.1.0\n!\nhostname test\n!\n")
 	doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, content)
 
-	if _, err := f.DidOpen(context.Background(), doc); err != nil {
+	if _, err := f.DidOpen(context.Background(), doc, nil); err != nil {
 		t.Fatalf("DidOpen failed: %v", err)
 	}
 
@@ -83,7 +83,7 @@ func TestHoverHostnameKeywordEnd(t *testing.T) {
 	content := []byte("!\n! version 26.1.0\n!\nhostname test\n!\n")
 	doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, content)
 
-	if _, err := f.DidOpen(context.Background(), doc); err != nil {
+	if _, err := f.DidOpen(context.Background(), doc, nil); err != nil {
 		t.Fatalf("DidOpen failed: %v", err)
 	}
 
@@ -116,7 +116,7 @@ func TestHoverInterface(t *testing.T) {
 	content := []byte("!\ninterface GigabitEthernet0/0\n!\n")
 	doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, content)
 
-	if _, err := f.DidOpen(context.Background(), doc); err != nil {
+	if _, err := f.DidOpen(context.Background(), doc, nil); err != nil {
 		t.Fatalf("DidOpen failed: %v", err)
 	}
 
@@ -147,7 +147,7 @@ func TestHoverRichMarkdownHostname(t *testing.T) {
 
 	content := []byte("!\nhostname test\n!\n")
 	doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, content)
-	if _, err := f.DidOpen(context.Background(), doc); err != nil {
+	if _, err := f.DidOpen(context.Background(), doc, nil); err != nil {
 		t.Fatalf("DidOpen failed: %v", err)
 	}
 	result, err := f.Hover(context.Background(), doc, protocol.Position{Line: 1, Character: 0})

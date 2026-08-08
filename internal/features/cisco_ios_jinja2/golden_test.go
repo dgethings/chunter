@@ -79,7 +79,7 @@ func runGolden(t *testing.T, name string) {
 	f := cisco_ios_jinja2.New()
 	defer f.Close()
 	doc := document.New("file:///"+name+".cfg", "cisco_ios_jinja2", 1, src)
-	diags, err := f.DidOpen(context.Background(), doc)
+	diags, err := f.DidOpen(context.Background(), doc, nil)
 	if err != nil {
 		t.Fatalf("DidOpen(%s): %v", name, err)
 	}

@@ -24,7 +24,7 @@ var checkCmd = &cobra.Command{
 		defer feature.Close()
 
 	doc := document.New(path, "cisco_ios_jinja2", 0, content)
-	diagnostics, err := feature.DidOpen(cmd.Context(), doc)
+	diagnostics, err := feature.DidOpen(cmd.Context(), doc, nil)
 	if err != nil {
 		return fmt.Errorf("parsing file: %w", err)
 	}

@@ -72,24 +72,63 @@ func (f *CiscoIOSFeature) Close() error {
 	return nil
 }
 
-func (f *CiscoIOSFeature) DidOpen(ctx context.Context, doc *document.Document) ([]protocol.Diagnostic, error) {
+// DidOpen parses the document and returns its diagnostics. When publish is
+// non-nil the diagnostics are streamed in two tiers (progressive publishing,
+// chunter-cfz): tier 1 publishes the tree-only passes (syntax/version/section/
+// protocol) immediately after parse, BEFORE the expensive symbols.Index; tier 2
+// publishes the full set (adds undefined-refs + duplicate-defs) after Index. A
+// nil publish skips mid-pipeline publishing and just returns the full set (used
+// by cmd/check and unit tests). Tier 2 is omitted when it would equal tier 1
+// (no ref diagnostics), avoiding a redundant publish on clean configs —
+// publishDiagnostics is full-replacement, so tier 1 already carried the full
+// set in that case.
+func (f *CiscoIOSFeature) DidOpen(ctx context.Context, doc *document.Document, publish func([]protocol.Diagnostic)) ([]protocol.Diagnostic, error) {
 	tree := f.parser.Parse(doc.Content, nil)
 	if tree != nil {
 		f.trees[doc.URI] = tree
+	}
+	treeDiags := f.runTreeDiagnostics(doc, tree)
+	if publish != nil {
+		publish(treeDiags)
+	}
+	if tree != nil {
 		f.symbols.Index(doc.URI, tree.RootNode(), doc.Content)
 	}
-	return f.runDiagnostics(doc, tree), nil
+	return f.finishRefDiagnostics(doc, treeDiags, publish), nil
 }
 
-func (f *CiscoIOSFeature) DidChange(ctx context.Context, doc *document.Document) ([]protocol.Diagnostic, error) {
+// DidChange re-parses (incrementally where the old tree is known) and returns
+// diagnostics. See DidOpen for the tiered-publishing contract of `publish`.
+func (f *CiscoIOSFeature) DidChange(ctx context.Context, doc *document.Document, publish func([]protocol.Diagnostic)) ([]protocol.Diagnostic, error) {
 	oldTree := f.trees[doc.URI]
 	newTree := f.parser.Parse(doc.Content, oldTree)
 	if oldTree != nil {
 		oldTree.Close()
 	}
 	f.trees[doc.URI] = newTree
+	treeDiags := f.runTreeDiagnostics(doc, newTree)
+	if publish != nil {
+		publish(treeDiags)
+	}
 	f.symbols.Index(doc.URI, newTree.RootNode(), doc.Content)
-	return f.runDiagnostics(doc, newTree), nil
+	return f.finishRefDiagnostics(doc, treeDiags, publish), nil
+}
+
+// finishRefDiagnostics runs the symbol-table-dependent passes (tier 2) and
+// returns the full accumulated set. It builds `final` as a fresh slice (not
+// aliasing treeDiags's backing array) so an async-queued tier-2 publish cannot
+// observe a later append. When publish is non-nil it publishes the full set —
+// unless there are no ref diagnostics, in which case tier 1 already published
+// the complete set and a tier-2 publish would be a redundant no-op.
+func (f *CiscoIOSFeature) finishRefDiagnostics(doc *document.Document, treeDiags []protocol.Diagnostic, publish func([]protocol.Diagnostic)) []protocol.Diagnostic {
+	refDiags := f.runRefDiagnostics(doc)
+	final := make([]protocol.Diagnostic, 0, len(treeDiags)+len(refDiags))
+	final = append(final, treeDiags...)
+	final = append(final, refDiags...)
+	if publish != nil && len(refDiags) > 0 {
+		publish(final)
+	}
+	return final
 }
 
 func (f *CiscoIOSFeature) DidClose(ctx context.Context, doc *document.Document) error {

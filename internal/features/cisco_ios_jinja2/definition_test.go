@@ -18,7 +18,7 @@ func defTestFeature(t *testing.T, src string) (*cisco_ios_jinja2.CiscoIOSFeature
 	f := cisco_ios_jinja2.New()
 	t.Cleanup(func() { f.Close() })
 	doc := document.New("file:///test.ios.j2", "cisco_ios_jinja2", 1, []byte(src))
-	if _, err := f.DidOpen(context.Background(), doc); err != nil {
+	if _, err := f.DidOpen(context.Background(), doc, nil); err != nil {
 		t.Fatalf("DidOpen: %v", err)
 	}
 	return f, doc

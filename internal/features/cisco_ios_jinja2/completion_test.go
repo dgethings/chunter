@@ -74,7 +74,7 @@ func TestCompletionWhileTypingValue(t *testing.T) {
 			f := cisco_ios_jinja2.New()
 			defer f.Close()
 			doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, []byte(tc.src))
-			if _, err := f.DidOpen(context.Background(), doc); err != nil {
+			if _, err := f.DidOpen(context.Background(), doc, nil); err != nil {
 				t.Fatalf("DidOpen: %v", err)
 			}
 			items, err := f.Completion(context.Background(), doc, protocol.Position{Line: tc.line, Character: tc.col})
@@ -134,7 +134,7 @@ func TestCompletionStillActiveForKeywordTyping(t *testing.T) {
 			f := cisco_ios_jinja2.New()
 			defer f.Close()
 			doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, []byte(tc.src))
-			if _, err := f.DidOpen(context.Background(), doc); err != nil {
+			if _, err := f.DidOpen(context.Background(), doc, nil); err != nil {
 				t.Fatalf("DidOpen: %v", err)
 			}
 			items, err := f.Completion(context.Background(), doc, protocol.Position{Line: tc.line, Character: tc.col})
@@ -161,7 +161,7 @@ func TestCompletionSnippetsStripPlaceholderDefaults(t *testing.T) {
 
 	src := []byte("!\n")
 	doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, src)
-	if _, err := f.DidOpen(context.Background(), doc); err != nil {
+	if _, err := f.DidOpen(context.Background(), doc, nil); err != nil {
 		t.Fatalf("DidOpen: %v", err)
 	}
 
@@ -203,7 +203,7 @@ func TestCompletionHostnameSnippetHasEmptyTabstop(t *testing.T) {
 	defer f.Close()
 
 	doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, []byte("!\n"))
-	if _, err := f.DidOpen(context.Background(), doc); err != nil {
+	if _, err := f.DidOpen(context.Background(), doc, nil); err != nil {
 		t.Fatalf("DidOpen: %v", err)
 	}
 
@@ -241,7 +241,7 @@ func TestCompletionNoDuplicateLabels(t *testing.T) {
 	defer f.Close()
 
 	doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, []byte("!\n"))
-	if _, err := f.DidOpen(context.Background(), doc); err != nil {
+	if _, err := f.DidOpen(context.Background(), doc, nil); err != nil {
 		t.Fatalf("DidOpen: %v", err)
 	}
 	items, err := f.Completion(context.Background(), doc, protocol.Position{Line: 1, Character: 0})
@@ -280,7 +280,7 @@ func TestCompletionNoFormHasDistinctLabel(t *testing.T) {
 	defer f.Close()
 
 	doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, []byte("!\n"))
-	if _, err := f.DidOpen(context.Background(), doc); err != nil {
+	if _, err := f.DidOpen(context.Background(), doc, nil); err != nil {
 		t.Fatalf("DidOpen: %v", err)
 	}
 	items, err := f.Completion(context.Background(), doc, protocol.Position{Line: 1, Character: 0})
@@ -311,14 +311,14 @@ func TestCompletionACLStandardVsExtended(t *testing.T) {
 	// Standard ACL
 	stdSrc := "!\nip access-list standard MY-STD\n permit 10.0.0.0 0.255.255.255\n!\n"
 	stdDoc := document.New("file:///std.cfg", "cisco_ios_jinja2", 1, []byte(stdSrc))
-	if _, err := f.DidOpen(context.Background(), stdDoc); err != nil {
+	if _, err := f.DidOpen(context.Background(), stdDoc, nil); err != nil {
 		t.Fatalf("DidOpen: %v", err)
 	}
 
 	// Extended ACL
 	extSrc := "!\nip access-list extended MY-EXT\n permit tcp any any eq 443\n!\n"
 	extDoc := document.New("file:///ext.cfg", "cisco_ios_jinja2", 1, []byte(extSrc))
-	if _, err := f.DidOpen(context.Background(), extDoc); err != nil {
+	if _, err := f.DidOpen(context.Background(), extDoc, nil); err != nil {
 		t.Fatalf("DidOpen: %v", err)
 	}
 
@@ -344,7 +344,6 @@ func TestCompletionACLStandardVsExtended(t *testing.T) {
 	// type-field resolution isn't working.
 	t.Logf("standard ACL: %d items, extended ACL: %d items", len(stdItems), len(extItems))
 }
-
 
 func findItemByLabel(items []protocol.CompletionItem, label string) *protocol.CompletionItem {
 	for i := range items {
@@ -374,7 +373,7 @@ func TestCompletionSectionAware_InterfaceExcludesConfigKeywords(t *testing.T) {
 
 	src := "!\ninterface GigabitEthernet0/0\n c\n!\n"
 	doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, []byte(src))
-	if _, err := f.DidOpen(context.Background(), doc); err != nil {
+	if _, err := f.DidOpen(context.Background(), doc, nil); err != nil {
 		t.Fatalf("DidOpen: %v", err)
 	}
 	items, err := f.Completion(context.Background(), doc, protocol.Position{Line: 2, Character: 1})
@@ -400,7 +399,7 @@ func TestCompletionSectionAware_TopLevelExcludesInterfaceKeywords(t *testing.T) 
 	defer f.Close()
 
 	doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, []byte("!\n"))
-	if _, err := f.DidOpen(context.Background(), doc); err != nil {
+	if _, err := f.DidOpen(context.Background(), doc, nil); err != nil {
 		t.Fatalf("DidOpen: %v", err)
 	}
 	items, err := f.Completion(context.Background(), doc, protocol.Position{Line: 1, Character: 0})
@@ -428,7 +427,7 @@ func TestCompletionIPAccessListSection(t *testing.T) {
 
 	src := "!\nip access-list extended TEST\n permit ip any any\n!\n"
 	doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, []byte(src))
-	if _, err := f.DidOpen(context.Background(), doc); err != nil {
+	if _, err := f.DidOpen(context.Background(), doc, nil); err != nil {
 		t.Fatalf("DidOpen: %v", err)
 	}
 	// Cursor on an empty line inside the ACL section
@@ -460,7 +459,7 @@ func TestCompletionEmptySectionKeywordsAppearEverywhere(t *testing.T) {
 			defer f.Close()
 
 			doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, []byte(tc.src))
-			if _, err := f.DidOpen(context.Background(), doc); err != nil {
+			if _, err := f.DidOpen(context.Background(), doc, nil); err != nil {
 				t.Fatalf("DidOpen: %v", err)
 			}
 			items, err := f.Completion(context.Background(), doc, protocol.Position{Line: tc.line, Character: tc.col})
@@ -482,7 +481,7 @@ func TestCompletionDocumentationIsMarkupContent(t *testing.T) {
 	defer f.Close()
 
 	doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, []byte("!\n"))
-	if _, err := f.DidOpen(context.Background(), doc); err != nil {
+	if _, err := f.DidOpen(context.Background(), doc, nil); err != nil {
 		t.Fatalf("DidOpen: %v", err)
 	}
 	items, err := f.Completion(context.Background(), doc, protocol.Position{Line: 1, Character: 0})
@@ -518,7 +517,7 @@ func TestCompletionDocumentationOmittedForEmptyDescription(t *testing.T) {
 	defer f.Close()
 
 	doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, []byte("!\n"))
-	if _, err := f.DidOpen(context.Background(), doc); err != nil {
+	if _, err := f.DidOpen(context.Background(), doc, nil); err != nil {
 		t.Fatalf("DidOpen: %v", err)
 	}
 	items, err := f.Completion(context.Background(), doc, protocol.Position{Line: 1, Character: 0})
@@ -699,7 +698,7 @@ func TestCompletionEnterModeDetail(t *testing.T) {
 	// scope, where interface/router/policy-map/etc. are offered.
 	content := []byte("!\nhostname r1\n!\n")
 	doc := document.New("file:///test.cfg", "cisco_ios_jinja2", 1, content)
-	if _, err := f.DidOpen(context.Background(), doc); err != nil {
+	if _, err := f.DidOpen(context.Background(), doc, nil); err != nil {
 		t.Fatalf("DidOpen: %v", err)
 	}
 	items, err := f.Completion(context.Background(), doc, protocol.Position{Line: 1, Character: 0})

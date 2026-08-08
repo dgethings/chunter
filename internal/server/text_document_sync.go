@@ -24,12 +24,13 @@ func (s *Server) DidOpen(ctx context.Context, params protocol.DidOpenTextDocumen
 		l.Error("failed to find supported language", "error", err.Error())
 		return nil
 	}
-	diagnostics, err := f.DidOpen(ctx, doc)
+	_, err = f.DidOpen(ctx, doc, func(diags []protocol.Diagnostic) {
+		publishDiagnostics(ctx, doc.URI, diags)
+	})
 	if err != nil {
 		l.Error("didOpen error", "error", err.Error())
 	}
 
-	publishDiagnostics(ctx, doc.URI, diagnostics)
 	l.Debug("opened", "uri", doc.URI)
 	return nil
 }
@@ -53,13 +54,13 @@ func (s *Server) DidChange(ctx context.Context, params protocol.DidChangeTextDoc
 			continue
 		}
 
-		diagnostics, err := f.DidChange(ctx, doc)
+		_, err = f.DidChange(ctx, doc, func(diags []protocol.Diagnostic) {
+			publishDiagnostics(ctx, doc.URI, diags)
+		})
 		if err != nil {
 			l.Error("failed to get diagnostics", "language", doc.LanguageID, "error", err)
 			continue
 		}
-
-		publishDiagnostics(ctx, doc.URI, diagnostics)
 	}
 	l.Debug("successfully changed", "uri", doc.URI)
 	return nil
