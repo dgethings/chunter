@@ -17,9 +17,9 @@ import (
 type stubFeature struct {
 	languageID string
 
-	didOpenCalls  atomic.Int32
+	didOpenCalls   atomic.Int32
 	didChangeCalls atomic.Int32
-	didCloseCalls atomic.Int32
+	didCloseCalls  atomic.Int32
 
 	// Injected diagnostic to publish from DidOpen/DidChange.
 	openDiags []protocol.Diagnostic
