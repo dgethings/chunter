@@ -157,3 +157,77 @@ func TestWrongSectionDiagnostics_ParentKeywordInChildSection(t *testing.T) {
 	diags := openDiags(t, src)
 	assertNoDiagAbout(t, diags, "nsf")
 }
+
+// TestWrongSectionDiagnostics_RouterCanonicalCommands guards chunter-vzy: the
+// generated keyword DB registers canonical router-process sub-commands
+// (`network`, `router-id`) only under obscure sections (IPv6-PMIPv6 / L2VPN),
+// so they were flagged as wrong-section inside every `router` section. The
+// curated routerKeywordOverlay marks them valid in config-router.
+func TestWrongSectionDiagnostics_RouterCanonicalCommands(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		kw   string // canonical router command that must NOT be flagged
+	}{
+		{
+			name: "network in router ospf",
+			src:  "!\nrouter ospf 1\n network 10.0.0.0 0.0.0.255 area 0\n!\n",
+			kw:   "network",
+		},
+		{
+			name: "router-id in router ospf",
+			src:  "!\nrouter ospf 1\n router-id 1.1.1.1\n!\n",
+			kw:   "router-id",
+		},
+		{
+			name: "network in router bgp (config-router-af inherits config-router)",
+			src:  "!\nrouter bgp 100\n address-family ipv4\n  network 10.0.0.0 mask 255.0.0.0\n!\n",
+			kw:   "network",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			diags := openDiags(t, tc.src)
+			if d, found := findHintByKeyword(diags, tc.kw); found {
+				t.Errorf("canonical router command %q should not be flagged (overlay): %s", tc.kw, d.Message)
+			}
+		})
+	}
+}
+
+// TestWrongSectionDiagnostics_OverlayIsSurgical confirms the router overlay
+// only relaxes config-router: `network` is still genuinely wrong inside an
+// interface section (it is not valid in config-if), so the Hint still fires.
+func TestWrongSectionDiagnostics_OverlayIsSurgical(t *testing.T) {
+	src := "!\ninterface Gi0/0\n network 10.0.0.0 0.0.0.255\n!\n"
+	diags := openDiags(t, src)
+	if _, found := findHintByKeyword(diags, "network"); !found {
+		t.Errorf("network should still be flagged in an interface section (overlay is config-router only): %+v", diags)
+	}
+}
+
+// TestWrongSectionDiagnostics_SuppressedInCorruptedContext guards chunter-9of
+// symptom 2: when a parse error corrupts section boundaries, wrong-section
+// hints are misleading noise and are suppressed. Two cases: (a) an
+// unterminated section greedily swallows a following top-level command, and
+// (b) an ERROR node wraps the command. The underlying problem is still
+// surfaced by the syntax pass (missing-eos / syntax-error).
+func TestWrongSectionDiagnostics_SuppressedInCorruptedContext(t *testing.T) {
+	t.Run("unterminated section swallows top-level command", func(t *testing.T) {
+		// No `!` terminates the interface, so `hostname` is parsed inside it.
+		src := "interface Loopback777\n speed 1000\nhostname r1\n"
+		diags := openDiags(t, src)
+		assertNoDiagAbout(t, diags, "hostname")
+		// The missing `!` is still reported.
+		if _, found := findDiagBySeverityPrefix(diags, protocol.SeverityWarning, "missing-eos"); !found {
+			t.Errorf("expected missing-eos warning for the unterminated section: %+v", diags)
+		}
+	})
+	t.Run("ERROR node wraps the command", func(t *testing.T) {
+		// Unterminated router + unclosed jinja -> single ERROR node; network
+		// is inside it, so its section context is an artefact of recovery.
+		src := "router ospf 1\n network 10.0.0.0 0.0.0.255 area 0\nhostname r{{\n"
+		diags := openDiags(t, src)
+		assertNoDiagAbout(t, diags, "network")
+	})
+}

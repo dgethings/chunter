@@ -107,9 +107,15 @@ changed lines.
 ## Notes on the keyword database
 
 The keyword database (keywords.go) is noisy: common words such as `match`,
-`network`, `name`, `priority`, and `mode` resolve to obscure sections
+`name`, `priority`, and `mode` resolve to obscure sections
 (`config-domain-vrf-mc-class`, `config-ipv6-pmipv6-domain-mn`, …) and so emit
-spurious `wrong-section` Hints even in their correct context. The
+spurious `wrong-section` Hints even in their correct context.
+
+The canonical router-process commands `network` and `router-id` were the
+highest-impact case of this (every OSPF/BGP `network` line is a false positive),
+and are now suppressed via a curated overlay in `keyword_overlay.go`
+(`keyword.Set.AddValidSections`), which marks them valid in `config-router`
+without altering hover/completion. Other commands remain noisy. The
 diagnostic-only fixtures below are deliberately built from **noise-free**
 commands so each fixture's golden contains only the diagnostics of its targeted
 pass. When authoring a new clean/diagnostic fixture, prefer the noise-free

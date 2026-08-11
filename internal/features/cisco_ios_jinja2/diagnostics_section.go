@@ -66,6 +66,18 @@ func (f *CiscoIOSFeature) runWrongSectionDiagnostics(doc *document.Document, tre
 			return true
 		}
 
+		// Suppress the hint when the parse corrupted the section context:
+		// either an ERROR node wraps this command (the parser could not build a
+		// clean tree, so its section membership is an artefact of recovery) or
+		// the enclosing section is missing its terminating `!` (an unterminated
+		// section greedily swallows following top-level commands into itself).
+		// In both cases the wrong-section flag would be misleading noise, and
+		// the underlying problem is already surfaced by the syntax pass
+		// (chunter-9of).
+		if unreliableSectionContext(n) {
+			return true
+		}
+
 		validSection := f.keyword.LookupSection(kw)
 		diags = append(diags, protocol.Diagnostic{
 			Range: protocol.LineRange(
@@ -129,3 +141,43 @@ func firstKeywordFromNode(n *sitter.Node, content []byte, kw *keyword.Set) strin
 // walkNamed was previously defined here as a private duplicate of
 // ast.WalkNamed; the diagnostic passes now share the single helper in
 // internal/ast (chunter-mpc).
+
+// unreliableSectionContext reports whether n's enclosing-section context is
+// too corrupted by parse recovery to trust a wrong-section hint. It returns
+// true when any ancestor of n is an ERROR node (the parser could not build a
+// clean tree around it) OR when the innermost enclosing section is missing its
+// terminating `eos` (an unterminated section greedily swallows following
+// top-level commands into itself). In both cases a wrong-section flag would be
+// misleading noise, and the syntax pass already surfaces the underlying
+// problem (chunter-9of).
+func unreliableSectionContext(n *sitter.Node) bool {
+	var innermostSection *sitter.Node
+	for p := n.Parent(); p != nil; p = p.Parent() {
+		if p.IsError() {
+			return true
+		}
+		if innermostSection == nil && section.IsKnownSectionKind(p.Kind()) {
+			innermostSection = p
+		}
+	}
+	if innermostSection != nil {
+		return hasMissingEos(innermostSection)
+	}
+	return false
+}
+
+// hasMissingEos reports whether sectionNode has a MISSING `eos` child — i.e.
+// the section ran to EOF (or into the next section) without its terminating
+// `!`. eos is always a direct child of its section, so a direct-children scan
+// suffices.
+func hasMissingEos(sectionNode *sitter.Node) bool {
+	if sectionNode == nil {
+		return false
+	}
+	for i := uint(0); i < sectionNode.ChildCount(); i++ {
+		if c := sectionNode.Child(i); c != nil && c.IsMissing() && c.Kind() == "eos" {
+			return true
+		}
+	}
+	return false
+}

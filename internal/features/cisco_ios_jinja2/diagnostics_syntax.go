@@ -45,9 +45,19 @@ func (f *CiscoIOSFeature) runSyntaxDiagnostics(doc *document.Document, tree *sit
 				Code:     "syntax-error",
 				Message:  fmt.Sprintf("syntax error near %q", firstLine(doc.Content, n)),
 			})
+			// Error recovery can swallow an unterminated Jinja delimiter (`{{`,
+			// `{%`, `{#`) as a bare anonymous token inside the ERROR node. There
+			// is then no `output`/`statement`/`comment` node and no MISSING
+			// closer for this pass to report, so the user sees no hint at the
+			// real error line — only the generic ERROR anchored earlier
+			// (chunter-9of). Recover that hint by stack-matching the Jinja
+			// openers/closers among the ERROR node's tokens and emitting a
+			// missing-closer diagnostic for each unmatched opener.
+			diags = append(diags, unclosedJinjaDiagnostics(n, doc.Content)...)
 			// The ERROR node's children are the recovered tokens it
 			// swallowed; descending into them would either re-report them or
-			// flag valid nodes that happened to be wrapped, so skip its subtree.
+			// flag valid nodes that happened to be wrapped, so skip its subtree
+			// (the Jinja scan above was a targeted exception for openers only).
 			return false
 		case n.IsMissing():
 			diags = append(diags, missingDiagnostic(n, doc.Content))
@@ -93,6 +103,68 @@ func missingDiagnostic(n *sitter.Node, content []byte) protocol.Diagnostic {
 		Code:     "missing-" + kind,
 		Message:  fmt.Sprintf("missing %q", kind),
 	}
+}
+
+// jinjaOpeners maps each Jinja opener token kind to the matching closer kind.
+// The keys/values are the literal anonymous punctuation tree-sitter emits
+// (verified against the grammar: `{{`/`}}`, `{%`/`%}`, `{#`/`#}`).
+var jinjaOpeners = map[string]string{
+	"{{": "}}",
+	"{%": "%}",
+	"{#": "#}",
+}
+
+// unclosedJinjaDiagnostics recovers missing-closer diagnostics for Jinja
+// delimiters swallowed inside an ERROR node. It collects every anonymous
+// opener/closer token under n (in source order) and stack-matches them per
+// delimiter type; each opener left on a stack at the end is an unclosed
+// delimiter and earns a missing-closer Error anchored on its line. MISSING
+// tokens are ignored (neither open nor close) so a partial `output` node with
+// a MISSING `}}` inside an ERROR is still flagged via its real `{{` opener.
+//
+// This mirrors the diagnostic an unclosed `{{` produces in isolation (a
+// MISSING `}}` inside a clean `output` node) but handles the case where error
+// recovery wraps the opener so no such node exists (chunter-9of).
+func unclosedJinjaDiagnostics(n *sitter.Node, content []byte) []protocol.Diagnostic {
+	// Per-closer stacks of currently-open, unmatched opener nodes.
+	open := make(map[string][]*sitter.Node)
+	walkAll(n, func(c *sitter.Node) bool {
+		if c == n {
+			return true
+		}
+		if c.IsMissing() {
+			return true // a MISSING token balances nothing; skip it.
+		}
+		if c.IsNamed() {
+			// Named nodes (e.g. a recovered `output` `{{ x }}`) are not
+			// delimiters themselves, but descend so their anonymous
+			// delimiter children are stack-matched below.
+			return true
+		}
+		if closer, isOpen := jinjaOpeners[c.Kind()]; isOpen {
+			open[closer] = append(open[closer], c)
+			return true
+		}
+		// A closer ("}}", "%}", "#}") matches the most recent opener of its
+		// own kind (LIFO); a stray closer with no openers is ignored.
+		if stack := open[c.Kind()]; len(stack) > 0 {
+			open[c.Kind()] = stack[:len(stack)-1]
+		}
+		return true
+	})
+	var diags []protocol.Diagnostic
+	for closer, openers := range open {
+		for _, op := range openers {
+			diags = append(diags, protocol.Diagnostic{
+				Range:    nodeRangeOnStartRow(op, content),
+				Severity: protocol.SeverityError,
+				Source:   "chunter",
+				Code:     "missing-" + closer,
+				Message:  fmt.Sprintf("missing %q", closer),
+			})
+		}
+	}
+	return diags
 }
 
 // nodeRangeOnStartRow returns a single-line range anchored on the node's start

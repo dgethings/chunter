@@ -127,6 +127,69 @@ func TestIsValidInSection(t *testing.T) {
 	}
 }
 
+// TestSetAddValidSections covers chunter-vzy: AddValidSections extends the
+// IsValidInSection index for canonical commands the generated DB
+// mis-registers, WITHOUT touching the keyword's canonical Lookup/
+// LookupSection record (so hover, completion, and diagnostic messages are
+// unchanged).
+func TestSetAddValidSections(t *testing.T) {
+	// Include keywords under config-router and its child config-router-af so
+	// the SectionTree models the hierarchy (otherwise the ancestry check
+	// below cannot relate the child to the parent).
+	kws := []keyword.Keyword{
+		{Keyword: "network", Section: "config-ipv6-pmipv6-domain-mn"},
+		{Keyword: "router-id", Section: "config-l2vpn"},
+		{Keyword: "passive-interface", Section: "config-router"},
+		{Keyword: "aggregate-address", Section: "config-router-af"},
+	}
+	s := keyword.NewSet(kws)
+
+	// Before the overlay, both are false in config-router.
+	if s.IsValidInSection("network", "config-router") {
+		t.Fatal("precondition: network should not be valid in config-router before overlay")
+	}
+
+	s.AddValidSections("network", "config-router")
+	s.AddValidSections("router-id", "config-router")
+
+	// After the overlay, both are valid in config-router (and its children via
+	// the existing ancestry check).
+	if !s.IsValidInSection("network", "config-router") {
+		t.Errorf("network should now be valid in config-router")
+	}
+	if !s.IsValidInSection("router-id", "config-router") {
+		t.Errorf("router-id should now be valid in config-router")
+	}
+	if !s.IsValidInSection("network", "config-router-af") {
+		t.Errorf("network should inherit into config-router-af (child section)")
+	}
+
+	// The canonical record is unchanged: LookupSection still reports the DB's
+	// first section (so a wrong-section message, when one IS emitted for a
+	// genuinely-wrong section, still names the documented home).
+	if got := s.LookupSection("network"); got != "config-ipv6-pmipv6-domain-mn" {
+		t.Errorf("LookupSection(network) = %q, want config-ipv6-pmipv6-domain-mn (overlay must not change canonical record)", got)
+	}
+	if kw, ok := s.Lookup("network"); !ok || kw.Section != "config-ipv6-pmipv6-domain-mn" {
+		t.Errorf("Lookup(network) canonical record changed: %+v", kw)
+	}
+
+	// Still wrong in a genuinely-unrelated section (overlay is surgical).
+	if s.IsValidInSection("network", "config-if") {
+		t.Errorf("network should still be invalid in config-if")
+	}
+
+	// Adding to a keyword unknown to the DB does not panic and records the
+	// validity (Lookup still misses, but IsValidInSection answers).
+	s.AddValidSections("brand-new", "config-router")
+	if !s.IsValidInSection("brand-new", "config-router") {
+		t.Errorf("AddValidSections on an unknown keyword should still be queryable")
+	}
+	if _, ok := s.Lookup("brand-new"); ok {
+		t.Errorf("Lookup(brand-new) should still miss (overlay does not create a record)")
+	}
+}
+
 func TestLookupSection(t *testing.T) {
 	kws := []keyword.Keyword{
 		{Keyword: "foo", Section: "config-if"},

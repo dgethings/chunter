@@ -28,10 +28,18 @@ func New() *CiscoIOSFeature {
 	p := sitter.NewParser()
 	p.SetLanguage(sitter.NewLanguage(ts.Language()))
 	slog.Info("grammar", "module", GrammarModule, "version", GrammarVersion())
+	keywords := keyword.NewSet(Keywords)
+	// Fold the curated router-command overlay into the section-validity index
+	// so canonical commands the generated DB mis-registers (network,
+	// router-id) are not flagged as wrong-section inside router sections
+	// (chunter-vzy). Hover/completion are unaffected.
+	for name, sections := range routerKeywordOverlay {
+		keywords.AddValidSections(name, sections...)
+	}
 	return &CiscoIOSFeature{
 		parser:  p,
 		trees:   make(map[string]*sitter.Tree),
-		keyword: keyword.NewSet(Keywords),
+		keyword: keywords,
 		symbols: symbols.NewTable(),
 	}
 }

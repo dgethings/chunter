@@ -175,6 +175,27 @@ func (s *Set) LookupSection(name string) string {
 	return s.byNameFirstSection[name]
 }
 
+// AddValidSections marks name as valid in each of the listed sections, in
+// addition to whatever the generated keyword data already records. It ONLY
+// extends the byNameSection index consulted by IsValidInSection — Lookup,
+// LookupSection, InSection and completion are unchanged — so it suppresses
+// wrong-section false positives for canonical commands the generated DB
+// registers under an obscure (or no) section, without altering their canonical
+// hover/completion record or diagnostic message.
+//
+// This is the chunter-side seam for the generated keyword DB's gaps (e.g.
+// `network` and `router-id` are canonical router-process commands the DB only
+// registers under IPv6-PMIPv6 / L2VPN sections); the deeper fix lives in the
+// external keyword generator. See chunter-vzy.
+func (s *Set) AddValidSections(name string, sections ...string) {
+	if _, ok := s.byNameSection[name]; !ok {
+		s.byNameSection[name] = make(map[string]bool)
+	}
+	for _, sec := range sections {
+		s.byNameSection[name][sec] = true
+	}
+}
+
 // InSection returns the keywords valid in section: the global keywords
 // (Section "") plus the keywords whose Section is exactly section. The
 // returned slice is SHARED across calls and MUST NOT be mutated by the

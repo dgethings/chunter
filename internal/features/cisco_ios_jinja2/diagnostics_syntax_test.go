@@ -150,6 +150,53 @@ func TestSyntaxDiagnostics_MissingToken(t *testing.T) {
 	}
 }
 
+// TestSyntaxDiagnostics_UnclosedJinjaSwallowedByError guards chunter-9of
+// symptom 1: when an unterminated section is immediately followed by an
+// unclosed jinja `{{`, error recovery wraps both into a single ERROR node and
+// the bare `{{` token never forms an `output` node, so there is no MISSING
+// `}}` for the pass to report. Without the recovery scan the user sees only a
+// generic "syntax error near <section header>" anchored lines earlier and
+// nothing on the actual `{{` line. The scan must recover a missing-}} Error
+// anchored on the `{{` line.
+func TestSyntaxDiagnostics_UnclosedJinjaSwallowedByError(t *testing.T) {
+	src := "router ospf 1\n network 10.0.0.0 0.0.0.255 area 0\nhostname r{{\n"
+	diags := openDiags(t, src)
+
+	const jinjaLine = 2 // "hostname r{{"
+	var seen bool
+	for _, d := range diags {
+		if d.Code == "missing-}}" {
+			seen = true
+			if d.Range.Start.Line != jinjaLine {
+				t.Errorf("missing-}} should anchor on line %d (the `{{`); got line %d", jinjaLine, d.Range.Start.Line)
+			}
+			if d.Severity != protocol.SeverityError {
+				t.Errorf("recovered missing-}} must be an Error; got %d", d.Severity)
+			}
+		}
+	}
+	if !seen {
+		t.Fatalf("expected a recovered missing-}} diagnostic on line %d; got %d diags: %+v", jinjaLine, len(diags), diags)
+	}
+}
+
+// TestSyntaxDiagnostics_ClosedJinjaInErrorNotDoubleReported confirms the
+// Jinja-recovery scan is balanced: a jinja expression that IS closed does not
+// earn a spurious missing-closer diagnostic even when wrapped inside an ERROR
+// node (only truly unmatched openers are flagged).
+func TestSyntaxDiagnostics_ClosedJinjaInErrorNotDoubleReported(t *testing.T) {
+	// Unterminated router section followed by a CLOSED jinja output. The
+	// router section + following content form an ERROR node, but `{{ x }}` is
+	// balanced, so no missing-}} should be emitted.
+	src := "router ospf 1\n network 10.0.0.0 0.0.0.255 area 0\nhostname r{{ x }}\n"
+	diags := openDiags(t, src)
+	for _, d := range diags {
+		if strings.HasPrefix(d.Code, "missing-}") {
+			t.Errorf("balanced `{{ x }}` must not produce a missing-closer diagnostic: %+v", d)
+		}
+	}
+}
+
 // TestSyntaxDiagnostics_CleanFileProducesNone ensures well-formed input
 // produces zero syntax/missing diagnostics (regression guard for the
 // root.HasError() gate and against over-eager flagging of existing fixtures).
