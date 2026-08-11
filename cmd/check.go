@@ -29,17 +29,21 @@ var checkCmd = &cobra.Command{
 			return fmt.Errorf("parsing file: %w", err)
 		}
 
+		out := cmd.OutOrStdout()
 		if len(diagnostics) == 0 {
-			fmt.Println("No issues found.")
+			fmt.Fprintln(out, "No issues found.")
 			return nil
 		}
 
+		// Stable, machine-parseable "file:line:col: message" format. The LSP
+		// Diagnostic.Source ("chunter") is meaningful over the protocol but is
+		// redundant noise here — the user already knows they invoked chunter.
+		// (chunter-lto)
 		for _, d := range diagnostics {
-			fmt.Printf("%s:%d:%d: [%s] %s\n",
+			fmt.Fprintf(out, "%s:%d:%d: %s\n",
 				path,
 				d.Range.Start.Line+1,
 				d.Range.Start.Character+1,
-				d.Source,
 				d.Message,
 			)
 		}

@@ -27,7 +27,11 @@ type CiscoIOSFeature struct {
 func New() *CiscoIOSFeature {
 	p := sitter.NewParser()
 	p.SetLanguage(sitter.NewLanguage(ts.Language()))
-	slog.Info("grammar", "module", GrammarModule, "version", GrammarVersion())
+	// Debug, not Info: the resolved grammar module/version is troubleshooting
+	// detail, not per-run operational signal. At the default --log-level=info
+	// this would otherwise leak into CLI output (e.g. `chunter check`). Surface
+	// it with `chunter check --log-level debug`. (chunter-lto)
+	slog.Debug("grammar", "module", GrammarModule, "version", GrammarVersion())
 	keywords := keyword.NewSet(Keywords)
 	// Fold the curated router-command overlay into the section-validity index
 	// so canonical commands the generated DB mis-registers (network,
