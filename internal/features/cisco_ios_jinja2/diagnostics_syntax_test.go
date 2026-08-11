@@ -80,8 +80,8 @@ func TestSyntaxDiagnostics_MissingEosBeforeNextSection(t *testing.T) {
 // kind surfaces its own header text in the message.
 func TestSyntaxDiagnostics_MissingEosAcrossSectionTypes(t *testing.T) {
 	cases := []struct {
-		name    string
-		src     string
+		name       string
+		src        string
 		wantHeader string
 	}{
 		{"interface", "interface Gi0/0\n speed 1000\n", "interface Gi0/0"},

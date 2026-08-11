@@ -3,96 +3,76 @@ package cisco_ios_jinja2
 import (
 	"strings"
 
-	"github.com/dgethings/chunter/internal/ast"
-	"github.com/dgethings/chunter/internal/document"
 	"github.com/dgethings/chunter/internal/keyword"
 	"github.com/dgethings/chunter/internal/protocol"
 	"github.com/dgethings/chunter/internal/section"
 	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
-// runWrongSectionDiagnostics emits a Hint for each command whose leading
-// keyword is known to the database but not valid in the enclosing config
-// section. This catches common copy-paste errors (e.g. an interface command
-// inside a router section). Unknown keywords are silently skipped - only
-// commands that ARE documented but in the WRONG section are flagged.
-// For command_line nodes the leading keyword is resolved via longest-prefix
-// match against the keyword DB, so multi-word commands like "ip access-group"
-// are validated correctly.
-func (f *CiscoIOSFeature) runWrongSectionDiagnostics(doc *document.Document, tree *sitter.Tree) []protocol.Diagnostic {
-	if tree == nil {
-		return nil
+// appendWrongSection is the per-node wrong-section check, folded into the
+// single-pass tree collector (chunter-zob, see collectTreeDiagnostics in
+// diagnostics.go). It emits a Hint for each command whose leading keyword is
+// known to the database but not valid in the enclosing config section. This
+// catches common copy-paste errors (e.g. an interface command inside a router
+// section). Unknown keywords are silently skipped - only commands that ARE
+// documented but in the WRONG section are flagged. For command_line nodes the
+// leading keyword is resolved via longest-prefix match against the keyword DB,
+// so multi-word commands like "ip access-group" are validated correctly.
+//
+// The collector only calls this on named command-like nodes (command_line and
+// *_statement); negated_statement is descended into so its inner command is
+// checked. This is byte-identical to the former runWrongSectionDiagnostics,
+// including inside ERROR subtrees: unreliableSectionContext suppresses the
+// hint when an ERROR is an ancestor, so descending there is a harmless no-op.
+func (f *CiscoIOSFeature) appendWrongSection(diags *[]protocol.Diagnostic, n *sitter.Node, content []byte) {
+	enclosingSection, _ := section.EnclosingSection(n, content)
+	// B5 (chunter-mpc): when the grammar detects a section the keyword DB has
+	// no keywords for (or a sub-mode more precise than the DB models),
+	// collapse it to the nearest known ancestor before validating — mirroring
+	// completion.go. Without this, a keyword documented for a parent section
+	// is wrongly flagged in the child (and IsValidInSection's ancestry check
+	// alone cannot relate a section the tree does not know to its parents).
+	if len(f.keyword.InSection(enclosingSection)) == 0 {
+		known := f.keyword.SectionsWithKeywords()
+		enclosingSection = f.keyword.SectionTree().NearestKnown(enclosingSection, known)
 	}
-	root := tree.RootNode()
-	if root == nil {
-		return nil
+
+	kw := firstKeywordFromNode(n, content, f.keyword)
+	if kw == "" {
+		return
 	}
 
-	var diags []protocol.Diagnostic
+	if _, ok := f.keyword.Lookup(kw); !ok {
+		return
+	}
 
-	ast.WalkNamed(root, func(n *sitter.Node) bool {
-		kind := n.Kind()
+	if f.keyword.IsValidInSection(kw, enclosingSection) {
+		return
+	}
 
-		if kind == "negated_statement" {
-			return true
-		}
+	// Suppress the hint when the parse corrupted the section context:
+	// either an ERROR node wraps this command (the parser could not build a
+	// clean tree, so its section membership is an artefact of recovery) or
+	// the enclosing section is missing its terminating `!` (an unterminated
+	// section greedily swallows following top-level commands into itself).
+	// In both cases the wrong-section flag would be misleading noise, and
+	// the underlying problem is already surfaced by the syntax pass
+	// (chunter-9of).
+	if unreliableSectionContext(n) {
+		return
+	}
 
-		if kind != "command_line" && !strings.HasSuffix(kind, "_statement") {
-			return true
-		}
-
-		enclosingSection, _ := section.EnclosingSection(n, doc.Content)
-		// B5 (chunter-mpc): when the grammar detects a section the keyword DB has
-		// no keywords for (or a sub-mode more precise than the DB models),
-		// collapse it to the nearest known ancestor before validating — mirroring
-		// completion.go. Without this, a keyword documented for a parent section
-		// is wrongly flagged in the child (and IsValidInSection's ancestry check
-		// alone cannot relate a section the tree does not know to its parents).
-		if len(f.keyword.InSection(enclosingSection)) == 0 {
-			known := f.keyword.SectionsWithKeywords()
-			enclosingSection = f.keyword.SectionTree().NearestKnown(enclosingSection, known)
-		}
-
-		kw := firstKeywordFromNode(n, doc.Content, f.keyword)
-		if kw == "" {
-			return true
-		}
-
-		if _, ok := f.keyword.Lookup(kw); !ok {
-			return true
-		}
-
-		if f.keyword.IsValidInSection(kw, enclosingSection) {
-			return true
-		}
-
-		// Suppress the hint when the parse corrupted the section context:
-		// either an ERROR node wraps this command (the parser could not build a
-		// clean tree, so its section membership is an artefact of recovery) or
-		// the enclosing section is missing its terminating `!` (an unterminated
-		// section greedily swallows following top-level commands into itself).
-		// In both cases the wrong-section flag would be misleading noise, and
-		// the underlying problem is already surfaced by the syntax pass
-		// (chunter-9of).
-		if unreliableSectionContext(n) {
-			return true
-		}
-
-		validSection := f.keyword.LookupSection(kw)
-		diags = append(diags, protocol.Diagnostic{
-			Range: protocol.LineRange(
-				n.StartPosition().Row,
-				n.StartPosition().Column,
-				n.EndPosition().Column,
-			),
-			Severity: protocol.SeverityHint,
-			Source:   "chunter",
-			Message:  kw + " is valid in " + validSection + ", not in " + enclosingSection,
-		})
-		return true
+	validSection := f.keyword.LookupSection(kw)
+	*diags = append(*diags, protocol.Diagnostic{
+		Range: protocol.LineRange(
+			n.StartPosition().Row,
+			n.StartPosition().Column,
+			n.EndPosition().Column,
+		),
+		Severity: protocol.SeverityHint,
+		Source:   "chunter",
+		Message:  kw + " is valid in " + validSection + ", not in " + enclosingSection,
 	})
-
-	return diags
 }
 
 // firstKeywordFromNode resolves the leading keyword for a command-like

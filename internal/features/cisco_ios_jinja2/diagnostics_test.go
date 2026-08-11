@@ -311,3 +311,33 @@ func TestVersionMismatchStillWorks(t *testing.T) {
 		t.Errorf("version-mismatch diagnostic missing after refactor: %+v", diags)
 	}
 }
+
+// TestMergedCollector_AllFamiliesInOnePass is the chunter-zob regression guard.
+// A single document triggers three diagnostic families at once — syntax
+// (missing-}}), wrong-section (an interface command in a router section), and
+// protocol-mismatch (an OSPF "area" in a BGP router) — and all three must
+// surface. collectTreeDiags folds the former independent tree walks into ONE
+// traversal; this asserts every per-node check still runs in that single walk
+// and emits its diagnostic. (command-version is exercised through the same
+// collector by TestCommandVersionDiagnostics.)
+func TestMergedCollector_AllFamiliesInOnePass(t *testing.T) {
+	src := "router bgp 100\n speed 1000\n area 0 range 10.0.0.0 255.0.0.0\n!\nhostname r{{\n"
+	diags := openDiags(t, src)
+
+	// protocol-mismatch: the OSPF-exclusive "area" command_line inside router
+	// bgp yields exactly one Error.
+	if pm := diagsByCode(diags, "protocol-mismatch"); len(pm) != 1 {
+		t.Errorf("want 1 protocol-mismatch diagnostic, got %d: %+v", len(pm), pm)
+	}
+
+	// wrong-section: "speed" (valid in config-if) inside a router section. This
+	// Hint carries no Code, so match on its message substring.
+	if _, ok := findDiagByMessageContains(diags, "speed is valid in config-if"); !ok {
+		t.Errorf("want a wrong-section hint for speed; got %d diags: %+v", len(diags), diags)
+	}
+
+	// syntax: the unterminated {{ yields a recovered missing-}} Error.
+	if _, ok := findDiagByCode(diags, "missing-}}"); !ok {
+		t.Errorf("want a missing-}} syntax diagnostic; got %d diags: %+v", len(diags), diags)
+	}
+}

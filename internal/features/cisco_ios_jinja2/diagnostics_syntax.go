@@ -4,14 +4,15 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/dgethings/chunter/internal/document"
 	"github.com/dgethings/chunter/internal/protocol"
 	"github.com/dgethings/chunter/internal/section"
 	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
-// runSyntaxDiagnostics surfaces tree-sitter parse-level problems as LSP
-// diagnostics. There are two kinds of recovery nodes the parser can emit:
+// appendSyntaxDiag is the per-node syntax/missing check, folded into the
+// single-pass tree collector (chunter-zob, see collectTreeDiagnostics in
+// diagnostics.go). It surfaces the two kinds of recovery nodes the parser can
+// emit:
 //
 //   - ERROR nodes — tokens that could not be incorporated into any rule. These
 //     are reported as SeverityError anchored on the offending span.
@@ -23,52 +24,36 @@ import (
 //     section, which is a common, low-severity condition downgraded to
 //     SeverityWarning and anchored on the section header.
 //
-// The whole pass is gated on root.HasError(), so clean files (the common
-// case) pay only a single boolean check.
-func (f *CiscoIOSFeature) runSyntaxDiagnostics(doc *document.Document, tree *sitter.Tree) []protocol.Diagnostic {
-	if tree == nil {
-		return nil
+// The caller (collectTreeDiags) invokes this only when inError is false — i.e.
+// n is NOT inside an ERROR subtree. That replaces the old driver's "return
+// false on ERROR to skip its subtree" descent rule: the merged walk still
+// descends into ERROR subtrees (so the command checks can run on commands
+// recovery swallowed), but suppresses the syntax re-report inside them.
+// Without this, descending would re-report the recovered tokens the ERROR
+// wrapped. On clean files there are no ERROR/MISSING nodes, so this is a pair
+// of false boolean checks per node — a no-op.
+func (f *CiscoIOSFeature) appendSyntaxDiag(diags *[]protocol.Diagnostic, n *sitter.Node, content []byte) {
+	switch {
+	case n.IsError():
+		*diags = append(*diags, protocol.Diagnostic{
+			Range:    nodeRangeOnStartRow(n, content),
+			Severity: protocol.SeverityError,
+			Source:   "chunter",
+			Code:     "syntax-error",
+			Message:  fmt.Sprintf("syntax error near %q", firstLine(content, n)),
+		})
+		// Error recovery can swallow an unterminated Jinja delimiter (`{{`,
+		// `{%`, `{#`) as a bare anonymous token inside the ERROR node. There
+		// is then no `output`/`statement`/`comment` node and no MISSING
+		// closer for this pass to report, so the user sees no hint at the
+		// real error line — only the generic ERROR anchored earlier
+		// (chunter-9of). Recover that hint by stack-matching the Jinja
+		// openers/closers among the ERROR node's tokens and emitting a
+		// missing-closer diagnostic for each unmatched opener.
+		*diags = append(*diags, unclosedJinjaDiagnostics(n, content)...)
+	case n.IsMissing():
+		*diags = append(*diags, missingDiagnostic(n, content))
 	}
-	root := tree.RootNode()
-	if root == nil || !root.HasError() {
-		return nil
-	}
-
-	var diags []protocol.Diagnostic
-	walkAll(root, func(n *sitter.Node) bool {
-		switch {
-		case n.IsError():
-			diags = append(diags, protocol.Diagnostic{
-				Range:    nodeRangeOnStartRow(n, doc.Content),
-				Severity: protocol.SeverityError,
-				Source:   "chunter",
-				Code:     "syntax-error",
-				Message:  fmt.Sprintf("syntax error near %q", firstLine(doc.Content, n)),
-			})
-			// Error recovery can swallow an unterminated Jinja delimiter (`{{`,
-			// `{%`, `{#`) as a bare anonymous token inside the ERROR node. There
-			// is then no `output`/`statement`/`comment` node and no MISSING
-			// closer for this pass to report, so the user sees no hint at the
-			// real error line — only the generic ERROR anchored earlier
-			// (chunter-9of). Recover that hint by stack-matching the Jinja
-			// openers/closers among the ERROR node's tokens and emitting a
-			// missing-closer diagnostic for each unmatched opener.
-			diags = append(diags, unclosedJinjaDiagnostics(n, doc.Content)...)
-			// The ERROR node's children are the recovered tokens it
-			// swallowed; descending into them would either re-report them or
-			// flag valid nodes that happened to be wrapped, so skip its subtree
-			// (the Jinja scan above was a targeted exception for openers only).
-			return false
-		case n.IsMissing():
-			diags = append(diags, missingDiagnostic(n, doc.Content))
-			// MISSING nodes are leaves (zero-width); no subtree to skip, but
-			// return false for uniformity.
-			return false
-		default:
-			return true
-		}
-	})
-	return diags
 }
 
 // missingDiagnostic builds the diagnostic for a MISSING node. A MISSING eos

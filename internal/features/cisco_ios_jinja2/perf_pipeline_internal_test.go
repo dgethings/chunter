@@ -105,13 +105,12 @@ func TestPipelineTiming(t *testing.T) {
 			fn   func() int
 		}
 		passes := []pass{
-			{"syntax", func() int { return len(f.runSyntaxDiagnostics(doc, tree)) }},
+			// tree-collector is the merged single-pass walk (chunter-zob) folding
+			// syntax + command-version + wrong-section + protocol-mismatch.
+			{"tree-collector", func() int { return len(f.collectTreeDiags(doc, tree)) }},
 			{"version-mismatch", func() int { return len(f.runVersionMismatchDiagnostics(doc, tree)) }},
-			{"command-version", func() int { return len(f.runCommandVersionDiagnostics(doc, tree)) }},
 			{"undefined-refs", func() int { return len(f.runUndefinedReferenceDiagnostics(doc)) }},
 			{"duplicate-defs", func() int { return len(f.runDuplicateDefinitionDiagnostics(doc)) }},
-			{"wrong-section", func() int { return len(f.runWrongSectionDiagnostics(doc, tree)) }},
-			{"protocol-mismatch", func() int { return len(f.runProtocolMismatchDiagnostics(doc, tree)) }},
 		}
 		passTotals := map[string]time.Duration{}
 		var passSum time.Duration

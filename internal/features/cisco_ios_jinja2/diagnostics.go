@@ -1,6 +1,8 @@
 package cisco_ios_jinja2
 
 import (
+	"strings"
+
 	"github.com/dgethings/chunter/internal/document"
 	"github.com/dgethings/chunter/internal/protocol"
 	sitter "github.com/tree-sitter/go-tree-sitter"
@@ -24,28 +26,104 @@ import (
 // Current passes:
 //
 // tree-only (tier 1):
-//  0. syntax / missing    (Error/Warning) — diagnostics_syntax.go
-//  1. version mismatch    (SeverityError) — diagnostics_version.go
-//  2. command version     (SeverityHint)  — diagnostics_version.go
-//  3. wrong section       (SeverityHint)  — diagnostics_section.go
-//  4. protocol mismatch   (SeverityError) — diagnostics_protocol.go
-//     (cross-protocol: an OSPF command inside a BGP router section, etc.;
-//     runs after wrong-section because it is the more specific, Error-
-//     severity signal, while wrong-section stays Hint)
+//  A. version mismatch   (SeverityError) — diagnostics_version.go
+//     Scans only top-level named children for the `! version X` comment and
+//     `version Y` statement; NOT a full tree walk, so it stays its own pass.
+//  B. merged tree collector (collectTreeDiags) — ONE full walk of the tree
+//     (chunter-zob) folding the per-node checks that each used to walk the
+//     whole tree independently:
+//       - syntax / missing  (Error/Warning) — diagnostics_syntax.go
+//       - command version   (SeverityHint)  — diagnostics_version.go
+//       - wrong section     (SeverityHint)  — diagnostics_section.go
+//       - protocol mismatch (SeverityError) — diagnostics_protocol.go
+//     The tree is now traversed once per didChange instead of 4 times.
 //
 // symbol-dependent (tier 2):
-//  5. undefined refs      (SeverityWarning) — diagnostics_refs.go
-//  6. duplicate defs      (SeverityWarning) — diagnostics_refs.go
+//  C. undefined refs      (SeverityWarning) — diagnostics_refs.go
+//  D. duplicate defs      (SeverityWarning) — diagnostics_refs.go
 
 // runTreeDiagnostics runs the passes that need only the parse tree + keyword DB.
 // It does NOT consult the symbol table, so it may run before symbols.Index.
 func (f *CiscoIOSFeature) runTreeDiagnostics(doc *document.Document, tree *sitter.Tree) []protocol.Diagnostic {
 	diags := make([]protocol.Diagnostic, 0)
-	diags = append(diags, f.runSyntaxDiagnostics(doc, tree)...)
 	diags = append(diags, f.runVersionMismatchDiagnostics(doc, tree)...)
-	diags = append(diags, f.runCommandVersionDiagnostics(doc, tree)...)
-	diags = append(diags, f.runWrongSectionDiagnostics(doc, tree)...)
-	diags = append(diags, f.runProtocolMismatchDiagnostics(doc, tree)...)
+	diags = append(diags, f.collectTreeDiags(doc, tree)...)
+	return diags
+}
+
+// collectTreeDiags is the single-pass tree-walking diagnostic collector
+// (chunter-zob). It folds the per-node checks that previously each walked the
+// whole tree — syntax/MISSING (appendSyntaxDiag), command-version
+// (appendCommandVersion), wrong-section (appendWrongSection), and
+// protocol-mismatch (appendProtocolMismatch) — into ONE traversal of the parse
+// tree, so the tree is visited once per didChange instead of 4 times.
+// version-mismatch is NOT here: it scans only top-level named children, not a
+// full walk, and stays a separate pass (see runTreeDiagnostics).
+//
+// Diagnostics output is BYTE-IDENTICAL to the former multi-walk version. The
+// guard is the existing golden suite (sorted by line/col/code/severity) plus
+// the table-driven inline tests. Two design points preserve that identity:
+//
+//  1. Traversal is walkAll-style (every child, named AND anonymous). The
+//     syntax check must see anonymous tokens: a MISSING `}}` is an anonymous
+//     child of a named `output` node (verified), and unclosedJinjaDiagnostics
+//     stack-matches anonymous Jinja openers/closers. A named-only walk
+//     (ast.WalkNamed) would skip them.
+//
+//  2. ERROR-subtree descent. The old runSyntaxDiagnostics returned false on an
+//     ERROR node to skip its subtree (descending would re-report the recovered
+//     tokens it wrapped). The merged walk still needs to descend into ERROR
+//     subtrees so the command checks can run on commands recovery swallowed —
+//     but the syntax check must NOT re-report inside an ERROR. This is
+//     reconciled with an `inError` flag threaded through the recursion:
+//     appendSyntaxDiag runs only when inError is false, while the command
+//     checks run on every named command-like node regardless. For
+//     wrong-section/protocol this is byte-identical: wrong-section already
+//     suppressed itself via unreliableSectionContext when an ERROR is an
+//     ancestor, and protocol's registry only matches dedicated *_statement
+//     kinds / exclusive keywords the recovery preserves.
+//
+// Diagnostics are collected in tree order; no consumer depends on order
+// (goldens sort; tiered tests use set-equality).
+func (f *CiscoIOSFeature) collectTreeDiags(doc *document.Document, tree *sitter.Tree) []protocol.Diagnostic {
+	if tree == nil {
+		return nil
+	}
+	root := tree.RootNode()
+	if root == nil {
+		return nil
+	}
+	runVer := runningVersion(doc, tree)
+	content := doc.Content
+	var diags []protocol.Diagnostic
+
+	var walk func(n *sitter.Node, inError bool)
+	walk = func(n *sitter.Node, inError bool) {
+		// Syntax / missing check: only outside ERROR subtrees (point 2 above).
+		if !inError {
+			f.appendSyntaxDiag(&diags, n, content)
+		}
+		// Command-level checks: named command-like nodes only. negated_statement
+		// is descended into (its inner command is command-like) but is not itself
+		// checked, mirroring the former passes.
+		if n.IsNamed() {
+			kind := n.Kind()
+			if kind != "negated_statement" && (kind == "command_line" || strings.HasSuffix(kind, "_statement")) {
+				f.appendWrongSection(&diags, n, content)
+				f.appendProtocolMismatch(&diags, n, content)
+				if runVer != "" {
+					f.appendCommandVersion(&diags, n, content, runVer)
+				}
+			}
+		}
+		// Descend into every child (named + anonymous), threading inError so the
+		// syntax check is suppressed throughout an ERROR subtree.
+		childInError := inError || n.IsError()
+		for i := uint(0); i < n.ChildCount(); i++ {
+			walk(n.Child(i), childInError)
+		}
+	}
+	walk(root, false)
 	return diags
 }
 

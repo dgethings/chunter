@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dgethings/chunter/internal/ast"
 	"github.com/dgethings/chunter/internal/document"
 	"github.com/dgethings/chunter/internal/protocol"
 	sitter "github.com/tree-sitter/go-tree-sitter"
@@ -65,7 +64,9 @@ func (f *CiscoIOSFeature) runVersionMismatchDiagnostics(doc *document.Document, 
 	return diags
 }
 
-// runCommandVersionDiagnostics emits a Hint for each command whose documented
+// appendCommandVersion is the per-node command-version check, folded into
+// the single-pass tree collector (chunter-zob, see collectTreeDiagnostics in
+// diagnostics.go). It emits a Hint for each command whose documented
 // MinVersion is later than the running version (recorded in a `! version X`
 // comment): the command was introduced after the image currently running the
 // config, so it may not be recognized. Only the introduced-after signal is
@@ -76,52 +77,30 @@ func (f *CiscoIOSFeature) runVersionMismatchDiagnostics(doc *document.Document, 
 // components, so a heuristic value like "3.9S" is treated as incomparable and
 // never flagged (chunter-y9d).
 //
-// The running version is required; with no `! version X` comment the pass is
-// a no-op (there is nothing to compare against).
-func (f *CiscoIOSFeature) runCommandVersionDiagnostics(doc *document.Document, tree *sitter.Tree) []protocol.Diagnostic {
-	if tree == nil {
-		return nil
+// The collector computes the running version once and only calls this when it
+// is non-empty; with no `! version X` comment this is never invoked. The
+// collector calls this only on named command-like nodes; negated_statement is
+// descended into (mirrors wrong-section).
+func (f *CiscoIOSFeature) appendCommandVersion(diags *[]protocol.Diagnostic, n *sitter.Node, content []byte, runVer string) {
+	name := firstKeywordFromNode(n, content, f.keyword)
+	if name == "" {
+		return
 	}
-	root := tree.RootNode()
-	if root == nil {
-		return nil
+	kw, ok := f.keyword.Lookup(name)
+	if !ok || kw.MinVersion == "" {
+		return
 	}
-	runVer := runningVersion(doc, tree)
-	if runVer == "" {
-		return nil
+	cmp, comparable := compareVersions(kw.MinVersion, runVer)
+	if !comparable || cmp <= 0 {
+		return
 	}
-
-	var diags []protocol.Diagnostic
-	ast.WalkNamed(root, func(n *sitter.Node) bool {
-		kind := n.Kind()
-		if kind == "negated_statement" {
-			return true // descend into the inner command (mirrors wrong-section)
-		}
-		if kind != "command_line" && !strings.HasSuffix(kind, "_statement") {
-			return true
-		}
-		name := firstKeywordFromNode(n, doc.Content, f.keyword)
-		if name == "" {
-			return true
-		}
-		kw, ok := f.keyword.Lookup(name)
-		if !ok || kw.MinVersion == "" {
-			return true
-		}
-		cmp, comparable := compareVersions(kw.MinVersion, runVer)
-		if !comparable || cmp <= 0 {
-			return true
-		}
-		diags = append(diags, protocol.Diagnostic{
-			Range:    protocol.LineRange(n.StartPosition().Row, n.StartPosition().Column, n.EndPosition().Column),
-			Severity: protocol.SeverityHint,
-			Source:   "chunter",
-			Code:     "version-introduced",
-			Message:  fmt.Sprintf("%s was introduced in release %s, later than the running version %s", name, kw.MinVersion, runVer),
-		})
-		return true
+	*diags = append(*diags, protocol.Diagnostic{
+		Range:    protocol.LineRange(n.StartPosition().Row, n.StartPosition().Column, n.EndPosition().Column),
+		Severity: protocol.SeverityHint,
+		Source:   "chunter",
+		Code:     "version-introduced",
+		Message:  fmt.Sprintf("%s was introduced in release %s, later than the running version %s", name, kw.MinVersion, runVer),
 	})
-	return diags
 }
 
 // runningVersion returns the IOS version recorded in the first `! version X`
